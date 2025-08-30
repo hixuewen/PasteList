@@ -168,16 +168,9 @@ namespace PasteList.ViewModels
                 await Task.Delay(500);
                 
                 // 尝试自动粘贴
-                bool pasteSuccess = await TryAutoPaste();
+                await SendCtrlV();
                 
-                if (pasteSuccess)
-                {
-                    StatusMessage = "内容已复制并自动粘贴";
-                }
-                else
-                {
-                    StatusMessage = "内容已复制到剪贴板，请手动按 Ctrl+V 粘贴";
-                }
+                StatusMessage = "内容已复制到剪贴板，已尝试自动粘贴";
             }
             catch (Exception ex)
             {

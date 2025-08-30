@@ -1,10 +1,12 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
@@ -21,10 +23,36 @@ namespace PasteList
     /// </summary>
     public partial class MainWindow : Window
     {
+        #region Windows API 声明
+        
+        [DllImport("user32.dll")]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+        
+        [DllImport("user32.dll")]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+        
+        // 热键修饰符
+        private const uint MOD_ALT = 0x0001;
+        private const uint MOD_CONTROL = 0x0002;
+        private const uint MOD_SHIFT = 0x0004;
+        private const uint MOD_WIN = 0x0008;
+        
+        // 虚拟键码
+        private const uint VK_Z = 0x5A;
+        
+        // 热键ID
+        private const int HOTKEY_ID = 9000;
+        
+        // Windows消息
+        private const int WM_HOTKEY = 0x0312;
+        
+        #endregion
+        
         private readonly MainWindowViewModel _viewModel;
         private readonly IClipboardService _clipboardService;
         private readonly IClipboardHistoryService _historyService;
         private readonly ClipboardDbContext _dbContext;
+        private HwndSource _source;
 
         /// <summary>
         /// 初始化MainWindow，设置数据上下文和服务
@@ -58,7 +86,7 @@ namespace PasteList
 
         /// <summary>
         /// 窗口加载完成事件处理
-        /// 初始化ViewModel的数据加载
+        /// 初始化ViewModel的数据加载和注册全局快捷键
         /// </summary>
         /// <param name="sender">事件发送者</param>
         /// <param name="e">事件参数</param>
@@ -69,8 +97,11 @@ namespace PasteList
                 // 加载历史记录数据
                 await _viewModel.LoadHistoryAsync();
                 
+                // 注册全局快捷键
+                RegisterGlobalHotKey();
+                
                 // 设置初始状态消息
-                _viewModel.StatusMessage = "应用程序已就绪";
+                _viewModel.StatusMessage = "应用程序已就绪，按 Alt+Z 可唤起窗口";
             }
             catch (Exception ex)
             {
@@ -80,7 +111,7 @@ namespace PasteList
 
         /// <summary>
         /// 窗口关闭事件处理
-        /// 清理资源，停止服务
+        /// 清理资源，停止服务，注销全局快捷键
         /// </summary>
         /// <param name="sender">事件发送者</param>
         /// <param name="e">事件参数</param>
@@ -88,6 +119,9 @@ namespace PasteList
         {
             try
             {
+                // 注销全局快捷键
+                UnregisterGlobalHotKey();
+                
                 // 停止剪贴板监听
                 _clipboardService?.StopListening();
                 
@@ -143,5 +177,131 @@ namespace PasteList
             // 记录到调试输出
             System.Diagnostics.Debug.WriteLine($"异常详情: {ex}");
         }
+        
+        #region 全局快捷键功能
+        
+        /// <summary>
+        /// 注册全局快捷键 Alt+Z
+        /// </summary>
+        private void RegisterGlobalHotKey()
+        {
+            try
+            {
+                // 获取窗口句柄
+                var helper = new WindowInteropHelper(this);
+                var hwnd = helper.Handle;
+                
+                if (hwnd != IntPtr.Zero)
+                {
+                    // 注册热键 Alt+Z
+                    bool success = RegisterHotKey(hwnd, HOTKEY_ID, MOD_ALT, VK_Z);
+                    
+                    if (success)
+                    {
+                        // 添加消息钩子
+                        _source = HwndSource.FromHwnd(hwnd);
+                        _source?.AddHook(WndProc);
+                        
+                        System.Diagnostics.Debug.WriteLine("全局快捷键 Alt+Z 注册成功");
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine("全局快捷键 Alt+Z 注册失败");
+                    }
+                }
+                else
+                {
+                    // 如果窗口句柄还未创建，延迟注册
+                    this.SourceInitialized += (s, e) => RegisterGlobalHotKey();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"注册全局快捷键时发生错误: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// 注销全局快捷键
+        /// </summary>
+        private void UnregisterGlobalHotKey()
+        {
+            try
+            {
+                var helper = new WindowInteropHelper(this);
+                var hwnd = helper.Handle;
+                
+                if (hwnd != IntPtr.Zero)
+                {
+                    // 注销热键
+                    UnregisterHotKey(hwnd, HOTKEY_ID);
+                    
+                    // 移除消息钩子
+                    _source?.RemoveHook(WndProc);
+                    
+                    System.Diagnostics.Debug.WriteLine("全局快捷键已注销");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"注销全局快捷键时发生错误: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// 窗口消息处理程序
+        /// 处理全局快捷键消息
+        /// </summary>
+        /// <param name="hwnd">窗口句柄</param>
+        /// <param name="msg">消息类型</param>
+        /// <param name="wParam">消息参数1</param>
+        /// <param name="lParam">消息参数2</param>
+        /// <param name="handled">是否已处理</param>
+        /// <returns>处理结果</returns>
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_HOTKEY)
+            {
+                int hotkeyId = wParam.ToInt32();
+                if (hotkeyId == HOTKEY_ID)
+                {
+                    // 处理 Alt+Z 快捷键
+                    OnGlobalHotKeyPressed();
+                    handled = true;
+                }
+            }
+            
+            return IntPtr.Zero;
+        }
+        
+        /// <summary>
+        /// 处理全局快捷键按下事件
+        /// 唤起主窗口
+        /// </summary>
+        private void OnGlobalHotKeyPressed()
+        {
+            try
+            {
+                // 如果窗口最小化，恢复窗口
+                if (WindowState == WindowState.Minimized)
+                {
+                    WindowState = WindowState.Normal;
+                }
+                
+                // 激活窗口并置于前台
+                Activate();
+                Topmost = true;
+                Topmost = false;
+                Focus();
+                
+                System.Diagnostics.Debug.WriteLine("通过全局快捷键唤起窗口");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"唤起窗口时发生错误: {ex.Message}");
+            }
+        }
+        
+        #endregion
     }
 }
