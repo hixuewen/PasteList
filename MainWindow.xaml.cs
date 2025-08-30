@@ -108,6 +108,21 @@ namespace PasteList
         }
 
         /// <summary>
+        /// 处理ListView双击事件
+        /// 调用ViewModel中的双击命令
+        /// </summary>
+        /// <param name="sender">事件发送者</param>
+        /// <param name="e">鼠标事件参数</param>
+        private void ListView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            // 确保有选中项且命令可执行
+            if (_viewModel.SelectedItem != null && _viewModel.DoubleClickItemCommand.CanExecute(null))
+            {
+                _viewModel.DoubleClickItemCommand.Execute(null);
+            }
+        }
+
+        /// <summary>
         /// 处理未捕获的异常
         /// 显示错误消息给用户
         /// </summary>

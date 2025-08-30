@@ -97,7 +97,8 @@
                   SelectedItem="{Binding SelectedItem}"
                   Margin="10"
                   BorderThickness="1"
-                  BorderBrush="#DDDDDD">
+                  BorderBrush="#DDDDDD"
+                  MouseDoubleClick="ListView_MouseDoubleClick">
             <ListView.View>
                 <GridView>
                     <GridViewColumn Header="内容" Width="300">

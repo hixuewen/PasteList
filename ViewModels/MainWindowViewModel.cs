@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -149,6 +150,176 @@ namespace PasteList.ViewModels
             }
         }
         
+        /// <summary>
+        /// 处理双击历史记录项事件
+        /// </summary>
+        private async void OnDoubleClickItem()
+        {
+            if (SelectedItem == null) return;
+            
+            try
+            {
+                // 将选中项的内容设置到剪贴板
+                Clipboard.SetText(SelectedItem.Content);
+                
+                StatusMessage = "内容已复制到剪贴板，正在尝试自动粘贴...";
+                
+                // 给用户一点时间切换到目标应用程序
+                await Task.Delay(500);
+                
+                // 尝试自动粘贴
+                bool pasteSuccess = await TryAutoPaste();
+                
+                if (pasteSuccess)
+                {
+                    StatusMessage = "内容已复制并自动粘贴";
+                }
+                else
+                {
+                    StatusMessage = "内容已复制到剪贴板，请手动按 Ctrl+V 粘贴";
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"操作失败: {ex.Message}";
+            }
+        }
+        
+        /// <summary>
+        /// 发送Ctrl+V按键到当前活动窗口
+        /// </summary>
+        private async Task SendCtrlV()
+        {
+            try
+            {
+                // 等待一小段时间确保剪贴板内容已设置
+                await Task.Delay(100);
+                
+                INPUT[] inputs = new INPUT[4];
+                
+                // 按下Ctrl键
+                inputs[0] = new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new InputUnion
+                    {
+                        ki = new KEYBDINPUT
+                        {
+                            wVk = VK_CONTROL,
+                            wScan = 0,
+                            dwFlags = 0,
+                            time = 0,
+                            dwExtraInfo = IntPtr.Zero
+                        }
+                    }
+                };
+                
+                // 按下V键
+                inputs[1] = new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new InputUnion
+                    {
+                        ki = new KEYBDINPUT
+                        {
+                            wVk = VK_V,
+                            wScan = 0,
+                            dwFlags = 0,
+                            time = 0,
+                            dwExtraInfo = IntPtr.Zero
+                        }
+                    }
+                };
+                
+                // 释放V键
+                inputs[2] = new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new InputUnion
+                    {
+                        ki = new KEYBDINPUT
+                        {
+                            wVk = VK_V,
+                            wScan = 0,
+                            dwFlags = KEYEVENTF_KEYUP,
+                            time = 0,
+                            dwExtraInfo = IntPtr.Zero
+                        }
+                    }
+                };
+                
+                // 释放Ctrl键
+                inputs[3] = new INPUT
+                {
+                    type = INPUT_KEYBOARD,
+                    u = new InputUnion
+                    {
+                        ki = new KEYBDINPUT
+                        {
+                            wVk = VK_CONTROL,
+                            wScan = 0,
+                            dwFlags = KEYEVENTF_KEYUP,
+                            time = 0,
+                            dwExtraInfo = IntPtr.Zero
+                        }
+                    }
+                };
+                
+                // 发送输入
+                uint result = SendInput((uint)inputs.Length, inputs, System.Runtime.InteropServices.Marshal.SizeOf(typeof(INPUT)));
+                
+                // 如果SendInput返回0，表示失败
+                if (result == 0)
+                {
+                    StatusMessage = "自动粘贴失败，请手动按 Ctrl+V 粘贴";
+                }
+            }
+            catch
+            {
+                // 如果SendInput失败，回退到简单的剪贴板提示
+                StatusMessage = "自动粘贴失败，请手动按 Ctrl+V 粘贴";
+            }
+        }
+        
+        #region Windows API
+        
+        [DllImport("user32.dll")]
+        private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+        
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+        
+        private const int INPUT_KEYBOARD = 1;
+        private const ushort VK_CONTROL = 0x11;
+        private const ushort VK_V = 0x56;
+        private const uint KEYEVENTF_KEYUP = 0x02;
+        
+        [StructLayout(LayoutKind.Sequential)]
+        public struct INPUT
+        {
+            public int type;
+            public InputUnion u;
+        }
+        
+        [StructLayout(LayoutKind.Explicit)]
+        public struct InputUnion
+        {
+            [FieldOffset(0)]
+            public KEYBDINPUT ki;
+        }
+        
+        [StructLayout(LayoutKind.Sequential)]
+        public struct KEYBDINPUT
+        {
+            public ushort wVk;
+            public ushort wScan;
+            public uint dwFlags;
+            public uint time;
+            public IntPtr dwExtraInfo;
+        }
+        
+        #endregion
+        
         #endregion
         
         #region 命令
@@ -163,7 +334,10 @@ namespace PasteList.ViewModels
         /// </summary>
         public ICommand StopListeningCommand { get; private set; } = null!;
         
-
+        /// <summary>
+        /// 双击历史记录项命令
+        /// </summary>
+        public ICommand DoubleClickItemCommand { get; private set; } = null!;
         
         #endregion
         
@@ -184,6 +358,10 @@ namespace PasteList.ViewModels
                 canExecute: () => IsListening
             );
             
+            DoubleClickItemCommand = new RelayCommand(
+                execute: () => OnDoubleClickItem(),
+                canExecute: () => SelectedItem != null
+            );
 
         }
         
