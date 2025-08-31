@@ -208,13 +208,13 @@ namespace PasteList.ViewModels
                 });
                 
                 // 确保UI更新完成
-                await Task.Delay(50);
+                await Task.Delay(30);
 
-                // 3. 模拟 Alt+Tab 切换到上一个窗口
-                await SwitchToPreviousWindow();
+                // 3. 切换到之前记录的活动窗口
+                SwitchToPreviousWindow();
 
-                // 4. 等待窗口切换完成并获得焦点
-                await Task.Delay(300);
+                // 4. 等待窗口切换完成并获得焦点（优化延迟时间）
+                await Task.Delay(100);
 
                 // 5. 发送粘贴命令
                 await SendCtrlV();
@@ -265,7 +265,7 @@ namespace PasteList.ViewModels
         /// <summary>
         /// 切换到之前记录的活动窗口
         /// </summary>
-        private async Task SwitchToPreviousWindow()
+        private void SwitchToPreviousWindow()
         {
             if (_previousActiveWindow != IntPtr.Zero)
             {
@@ -274,31 +274,78 @@ namespace PasteList.ViewModels
             }
             else
             {
-                // 如果没有记录的窗口，则使用Alt+Tab切换
-                INPUT[] inputs = new INPUT[1];
-                var extraInfo = GetMessageExtraInfo();
-
-                // Press Alt
-                inputs[0] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_MENU, dwFlags = 0, dwExtraInfo = extraInfo } } };
-                SendInput(1, inputs, System.Runtime.InteropServices.Marshal.SizeOf(typeof(INPUT)));
-                await Task.Delay(50);
-
-                // Press Tab
-                inputs[0].u.ki.wVk = VK_TAB;
-                inputs[0].u.ki.dwFlags = 0;
-                SendInput(1, inputs, System.Runtime.InteropServices.Marshal.SizeOf(typeof(INPUT)));
-                await Task.Delay(50);
-
-                // Release Tab
-                inputs[0].u.ki.wVk = VK_TAB;
-                inputs[0].u.ki.dwFlags = KEYEVENTF_KEYUP;
-                SendInput(1, inputs, System.Runtime.InteropServices.Marshal.SizeOf(typeof(INPUT)));
-                await Task.Delay(50);
+                // 如果没有记录的窗口，则使用Alt+Tab切换（简化版本）
+                INPUT[] inputs = new INPUT[4];
                 
-                // Release Alt
-                inputs[0].u.ki.wVk = VK_MENU;
-                inputs[0].u.ki.dwFlags = KEYEVENTF_KEYUP;
-                SendInput(1, inputs, System.Runtime.InteropServices.Marshal.SizeOf(typeof(INPUT)));
+                // 按下 Alt 键
+                inputs[0] = new INPUT
+                {
+                    type = 1, // INPUT_KEYBOARD
+                    u = new INPUTUNION
+                    {
+                        ki = new KEYBDINPUT
+                        {
+                            wVk = 0x12, // VK_MENU (Alt)
+                            wScan = 0,
+                            dwFlags = 0,
+                            time = 0,
+                            dwExtraInfo = GetMessageExtraInfo()
+                        }
+                    }
+                };
+                
+                // 按下 Tab 键
+                inputs[1] = new INPUT
+                {
+                    type = 1, // INPUT_KEYBOARD
+                    u = new INPUTUNION
+                    {
+                        ki = new KEYBDINPUT
+                        {
+                            wVk = 0x09, // VK_TAB
+                            wScan = 0,
+                            dwFlags = 0,
+                            time = 0,
+                            dwExtraInfo = GetMessageExtraInfo()
+                        }
+                    }
+                };
+                
+                // 释放 Tab 键
+                inputs[2] = new INPUT
+                {
+                    type = 1, // INPUT_KEYBOARD
+                    u = new INPUTUNION
+                    {
+                        ki = new KEYBDINPUT
+                        {
+                            wVk = 0x09, // VK_TAB
+                            wScan = 0,
+                            dwFlags = 2, // KEYEVENTF_KEYUP
+                            time = 0,
+                            dwExtraInfo = GetMessageExtraInfo()
+                        }
+                    }
+                };
+                
+                // 释放 Alt 键
+                inputs[3] = new INPUT
+                {
+                    type = 1, // INPUT_KEYBOARD
+                    u = new INPUTUNION
+                    {
+                        ki = new KEYBDINPUT
+                        {
+                            wVk = 0x12, // VK_MENU (Alt)
+                            wScan = 0,
+                            dwFlags = 2, // KEYEVENTF_KEYUP
+                            time = 0,
+                            dwExtraInfo = GetMessageExtraInfo()
+                        }
+                    }
+                };
+                
+                SendInput(4, inputs, Marshal.SizeOf(typeof(INPUT)));
             }
         }
 
