@@ -25,8 +25,6 @@ namespace PasteList
     public partial class MainWindow : Window
     {
         private bool _isClosing = false;
-        private bool _trayIconVisible = false;
-        private NOTIFYICONDATA _trayIconData;
         private HwndSource? _source;
         #region Windows API 声明
         
@@ -42,21 +40,7 @@ namespace PasteList
         [DllImport("kernel32.dll")]
         static extern IntPtr GetModuleHandle(string lpModuleName);
         
-        [DllImport("shell32.dll")]
-        private static extern bool Shell_NotifyIcon(uint dwMessage, ref NOTIFYICONDATA pnid);
-        
-        [StructLayout(LayoutKind.Sequential)]
-        private struct NOTIFYICONDATA
-        {
-            public uint cbSize;
-            public IntPtr hWnd;
-            public uint uID;
-            public uint uFlags;
-            public uint uCallbackMessage;
-            public IntPtr hIcon;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-            public string szTip;
-        }
+
         
         /// <summary>
         /// 重写窗口消息处理，处理托盘图标事件
@@ -95,15 +79,7 @@ namespace PasteList
                     }
                     break;
                     
-                case (int)WM_TRAYICON:
-                    switch (lParam.ToInt32() & 0xFFFF)
-                    {
-                        case 0x0203: // WM_LBUTTONDBLCLK - 双击
-                            RestoreWindow();
-                            handled = true;
-                            break;
-                    }
-                    break;
+
             }
             
             return IntPtr.Zero;
@@ -123,15 +99,6 @@ namespace PasteList
         
         // Windows消息
         private const int WM_HOTKEY = 0x0312;
-        private const uint WM_TRAYICON = 0x8000;
-        
-        // 托盘图标相关常量
-        private const uint NIM_ADD = 0x00000000;
-        private const uint NIM_MODIFY = 0x00000001;
-        private const uint NIM_DELETE = 0x00000002;
-        private const uint NIF_MESSAGE = 0x00000001;
-        private const uint NIF_ICON = 0x00000002;
-        private const uint NIF_TIP = 0x00000004;
         
         #endregion
         
@@ -169,37 +136,13 @@ namespace PasteList
             // 订阅窗口状态变化事件
             StateChanged += MainWindow_StateChanged;
             
-            // 初始化托盘图标
-            InitializeNotifyIcon();
+            // 托盘图标已在XAML中定义，无需额外初始化
             
             // 窗口加载完成后初始化ViewModel
             Loaded += MainWindow_Loaded;
         }
         
-        /// <summary>
-        /// 初始化托盘图标
-        /// 使用 Windows API 创建托盘图标
-        /// </summary>
-        private void InitializeNotifyIcon()
-        {
-            // 延迟到窗口完全加载后再初始化
-            this.Loaded += (s, e) => {
-                // 初始化托盘图标数据结构
-                _trayIconData = new NOTIFYICONDATA();
-                _trayIconData.cbSize = (uint)Marshal.SizeOf(_trayIconData);
-                _trayIconData.hWnd = new WindowInteropHelper(this).Handle;
-                _trayIconData.uID = 1;
-                _trayIconData.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
-                _trayIconData.uCallbackMessage = WM_TRAYICON;
-                // 使用系统默认应用程序图标
-                _trayIconData.hIcon = LoadIcon(IntPtr.Zero, new IntPtr(32512)); // IDI_APPLICATION
-                _trayIconData.szTip = "PasteList - 剪贴板历史记录";
-                
-                // 立即显示托盘图标进行测试
-                ShowTrayIcon();
-                System.Diagnostics.Debug.WriteLine("托盘图标已初始化并显示");
-            };
-        }
+
 
         /// <summary>
         /// 窗口加载完成事件处理
@@ -250,9 +193,6 @@ namespace PasteList
                 // 停止剪贴板监听
                 _clipboardService?.StopListening();
                 
-                // 释放托盘图标资源
-                HideTrayIcon();
-                
                 // 释放ViewModel资源
                 _viewModel?.Dispose();
                 
@@ -280,33 +220,10 @@ namespace PasteList
             if (WindowState == WindowState.Minimized)
             {
                 Hide();
-                ShowTrayIcon();
             }
         }
         
-        /// <summary>
-        /// 显示托盘图标
-        /// </summary>
-        private void ShowTrayIcon()
-        {
-            if (!_trayIconVisible && _trayIconData.hWnd != IntPtr.Zero)
-            {
-                Shell_NotifyIcon(NIM_ADD, ref _trayIconData);
-                _trayIconVisible = true;
-            }
-        }
-        
-        /// <summary>
-        /// 隐藏托盘图标
-        /// </summary>
-        private void HideTrayIcon()
-        {
-            if (_trayIconVisible)
-            {
-                Shell_NotifyIcon(NIM_DELETE, ref _trayIconData);
-                _trayIconVisible = false;
-            }
-        }
+
         
         /// <summary>
         /// 恢复窗口显示
@@ -316,7 +233,6 @@ namespace PasteList
             Show();
             WindowState = WindowState.Normal;
             Activate();
-            HideTrayIcon();
         }
         
         /// <summary>
@@ -325,7 +241,6 @@ namespace PasteList
         private void ExitApplication()
         {
             _isClosing = true;
-            HideTrayIcon();
             Application.Current.Shutdown();
         }
         
@@ -464,6 +379,42 @@ namespace PasteList
             {
                 System.Diagnostics.Debug.WriteLine($"唤起窗口时发生错误: {ex.Message}");
             }
+        }
+        
+        #endregion
+        
+        #region 托盘菜单事件处理
+        
+
+        
+        /// <summary>
+        /// 处理"显示窗口"菜单项点击事件
+        /// </summary>
+        /// <param name="sender">事件发送者</param>
+        /// <param name="e">事件参数</param>
+        private void ShowWindow_Click(object sender, RoutedEventArgs e)
+        {
+            RestoreWindow();
+        }
+        
+        /// <summary>
+        /// 处理"退出"菜单项点击事件
+        /// </summary>
+        /// <param name="sender">事件发送者</param>
+        /// <param name="e">事件参数</param>
+        private void Exit_Click(object sender, RoutedEventArgs e)
+        {
+            ExitApplication();
+        }
+        
+        /// <summary>
+        /// 处理托盘图标双击事件
+        /// </summary>
+        /// <param name="sender">事件发送者</param>
+        /// <param name="e">事件参数</param>
+        private void TrayIcon_TrayMouseDoubleClick(object sender, RoutedEventArgs e)
+        {
+            RestoreWindow();
         }
         
         #endregion
