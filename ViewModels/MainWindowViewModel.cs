@@ -159,23 +159,60 @@ namespace PasteList.ViewModels
             
             try
             {
-                // 将选中项的内容设置到剪贴板
+                // 1. 将选中项的内容设置到剪贴板
                 Clipboard.SetText(SelectedItem.Content);
                 
-                StatusMessage = "内容已复制到剪贴板，正在尝试自动粘贴...";
+                StatusMessage = "内容已复制到剪贴板，正在隐藏到托盘...";
+
+                // 2. 最小化并隐藏主界面到托盘
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    var mainWindow = Application.Current.MainWindow;
+                    if (mainWindow != null)
+                    {
+                        mainWindow.WindowState = WindowState.Minimized;
+                        mainWindow.Hide();
+                    }
+                });
                 
-                // 给用户一点时间切换到目标应用程序
+                // 3. 稍微延时，让用户有时间切换到目标应用或让目标应用获得焦点
                 await Task.Delay(500);
                 
-                // 尝试自动粘贴
+                // 4. 将剪贴板的内容粘贴到光标所在的焦点处
                 await SendCtrlV();
                 
-                StatusMessage = "内容已复制到剪贴板，已尝试自动粘贴";
+                StatusMessage = "内容已自动粘贴到光标位置";
             }
             catch (Exception ex)
             {
                 StatusMessage = $"操作失败: {ex.Message}";
             }
+        }
+        
+        /// <summary>
+        /// 等待窗口切换完成
+        /// </summary>
+        /// <param name="originalWindow">原始窗口句柄</param>
+        /// <returns>是否成功切换到其他窗口</returns>
+        private async Task<bool> WaitForWindowSwitch(IntPtr originalWindow)
+        {
+            const int maxWaitTime = 1000; // 最大等待1秒
+            const int checkInterval = 50;  // 每50毫秒检查一次
+            int elapsedTime = 0;
+            
+            while (elapsedTime < maxWaitTime)
+            {
+                await Task.Delay(checkInterval);
+                elapsedTime += checkInterval;
+                
+                IntPtr currentWindow = GetForegroundWindow();
+                if (currentWindow != originalWindow && currentWindow != IntPtr.Zero)
+                {
+                    return true; // 成功切换到其他窗口
+                }
+            }
+            
+            return false; // 超时，切换失败
         }
         
         /// <summary>
@@ -274,6 +311,92 @@ namespace PasteList.ViewModels
             }
         }
         
+        /// <summary>
+        /// 模拟 Alt+Tab 切换到上一个窗口
+        /// </summary>
+        private void SwitchToPreviousWindow()
+        {
+            try
+            {
+                INPUT[] inputs = new INPUT[4];
+                
+                // Press Alt
+                inputs[0] = new INPUT 
+                { 
+                    type = INPUT_KEYBOARD, 
+                    u = new InputUnion 
+                    { 
+                        ki = new KEYBDINPUT 
+                        { 
+                            wVk = VK_MENU, 
+                            dwFlags = 0,
+                            time = 0,
+                            dwExtraInfo = IntPtr.Zero
+                        } 
+                    } 
+                };
+                
+                // Press Tab
+                inputs[1] = new INPUT 
+                { 
+                    type = INPUT_KEYBOARD, 
+                    u = new InputUnion 
+                    { 
+                        ki = new KEYBDINPUT 
+                        { 
+                            wVk = VK_TAB, 
+                            dwFlags = 0,
+                            time = 0,
+                            dwExtraInfo = IntPtr.Zero
+                        } 
+                    } 
+                };
+                
+                // Release Tab
+                inputs[2] = new INPUT 
+                { 
+                    type = INPUT_KEYBOARD, 
+                    u = new InputUnion 
+                    { 
+                        ki = new KEYBDINPUT 
+                        { 
+                            wVk = VK_TAB, 
+                            dwFlags = KEYEVENTF_KEYUP,
+                            time = 0,
+                            dwExtraInfo = IntPtr.Zero
+                        } 
+                    } 
+                };
+                
+                // Release Alt
+                inputs[3] = new INPUT 
+                { 
+                    type = INPUT_KEYBOARD, 
+                    u = new InputUnion 
+                    { 
+                        ki = new KEYBDINPUT 
+                        { 
+                            wVk = VK_MENU, 
+                            dwFlags = KEYEVENTF_KEYUP,
+                            time = 0,
+                            dwExtraInfo = IntPtr.Zero
+                        } 
+                    } 
+                };
+
+                uint result = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT)));
+                
+                if (result == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine("SendInput failed for Alt+Tab");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"SwitchToPreviousWindow failed: {ex.Message}");
+            }
+        }
+        
         #region Windows API
         
         [DllImport("user32.dll")]
@@ -285,6 +408,8 @@ namespace PasteList.ViewModels
         private const int INPUT_KEYBOARD = 1;
         private const ushort VK_CONTROL = 0x11;
         private const ushort VK_V = 0x56;
+        private const ushort VK_MENU = 0x12; // Alt key
+        private const ushort VK_TAB = 0x09;  // Tab key
         private const uint KEYEVENTF_KEYUP = 0x02;
         
         [StructLayout(LayoutKind.Sequential)]
@@ -432,8 +557,6 @@ namespace PasteList.ViewModels
                 StatusMessage = $"停止监听失败: {ex.Message}";
             }
         }
-        
-
         
 
         

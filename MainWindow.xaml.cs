@@ -11,6 +11,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+// 使用 WPF 原生方式实现托盘功能
 using PasteList.ViewModels;
 using PasteList.Services;
 using PasteList.Data;
@@ -23,13 +24,90 @@ namespace PasteList
     /// </summary>
     public partial class MainWindow : Window
     {
+        private bool _isClosing = false;
+        private bool _trayIconVisible = false;
+        private NOTIFYICONDATA _trayIconData;
+        private HwndSource? _source;
         #region Windows API 声明
         
         [DllImport("user32.dll")]
         private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
         
         [DllImport("user32.dll")]
-        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+        static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+        
+        [DllImport("user32.dll")]
+        static extern IntPtr LoadIcon(IntPtr hInstance, IntPtr lpIconName);
+        
+        [DllImport("kernel32.dll")]
+        static extern IntPtr GetModuleHandle(string lpModuleName);
+        
+        [DllImport("shell32.dll")]
+        private static extern bool Shell_NotifyIcon(uint dwMessage, ref NOTIFYICONDATA pnid);
+        
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NOTIFYICONDATA
+        {
+            public uint cbSize;
+            public IntPtr hWnd;
+            public uint uID;
+            public uint uFlags;
+            public uint uCallbackMessage;
+            public IntPtr hIcon;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string szTip;
+        }
+        
+        /// <summary>
+        /// 重写窗口消息处理，处理托盘图标事件
+        /// </summary>
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            
+            // 获取窗口句柄并添加消息钩子
+            _source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            _source.AddHook(WndProc);
+            
+            // 注册热键
+            RegisterHotKey(new WindowInteropHelper(this).Handle, HOTKEY_ID, MOD_ALT, VK_Z);
+        }
+        
+        /// <summary>
+        /// 窗口消息处理
+        /// </summary>
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            switch (msg)
+            {
+                case WM_HOTKEY:
+                    if (wParam.ToInt32() == HOTKEY_ID)
+                    {
+                        if (IsVisible)
+                        {
+                            WindowState = WindowState.Minimized;
+                        }
+                        else
+                        {
+                            RestoreWindow();
+                        }
+                        handled = true;
+                    }
+                    break;
+                    
+                case (int)WM_TRAYICON:
+                    switch (lParam.ToInt32() & 0xFFFF)
+                    {
+                        case 0x0203: // WM_LBUTTONDBLCLK - 双击
+                            RestoreWindow();
+                            handled = true;
+                            break;
+                    }
+                    break;
+            }
+            
+            return IntPtr.Zero;
+        }
         
         // 热键修饰符
         private const uint MOD_ALT = 0x0001;
@@ -45,6 +123,15 @@ namespace PasteList
         
         // Windows消息
         private const int WM_HOTKEY = 0x0312;
+        private const uint WM_TRAYICON = 0x8000;
+        
+        // 托盘图标相关常量
+        private const uint NIM_ADD = 0x00000000;
+        private const uint NIM_MODIFY = 0x00000001;
+        private const uint NIM_DELETE = 0x00000002;
+        private const uint NIF_MESSAGE = 0x00000001;
+        private const uint NIF_ICON = 0x00000002;
+        private const uint NIF_TIP = 0x00000004;
         
         #endregion
         
@@ -52,7 +139,6 @@ namespace PasteList
         private readonly IClipboardService _clipboardService;
         private readonly IClipboardHistoryService _historyService;
         private readonly ClipboardDbContext _dbContext;
-        private HwndSource _source;
 
         /// <summary>
         /// 初始化MainWindow，设置数据上下文和服务
@@ -80,8 +166,39 @@ namespace PasteList
             // 订阅窗口关闭事件
             Closing += MainWindow_Closing;
             
+            // 订阅窗口状态变化事件
+            StateChanged += MainWindow_StateChanged;
+            
+            // 初始化托盘图标
+            InitializeNotifyIcon();
+            
             // 窗口加载完成后初始化ViewModel
             Loaded += MainWindow_Loaded;
+        }
+        
+        /// <summary>
+        /// 初始化托盘图标
+        /// 使用 Windows API 创建托盘图标
+        /// </summary>
+        private void InitializeNotifyIcon()
+        {
+            // 延迟到窗口完全加载后再初始化
+            this.Loaded += (s, e) => {
+                // 初始化托盘图标数据结构
+                _trayIconData = new NOTIFYICONDATA();
+                _trayIconData.cbSize = (uint)Marshal.SizeOf(_trayIconData);
+                _trayIconData.hWnd = new WindowInteropHelper(this).Handle;
+                _trayIconData.uID = 1;
+                _trayIconData.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+                _trayIconData.uCallbackMessage = WM_TRAYICON;
+                // 使用系统默认应用程序图标
+                _trayIconData.hIcon = LoadIcon(IntPtr.Zero, new IntPtr(32512)); // IDI_APPLICATION
+                _trayIconData.szTip = "PasteList - 剪贴板历史记录";
+                
+                // 立即显示托盘图标进行测试
+                ShowTrayIcon();
+                System.Diagnostics.Debug.WriteLine("托盘图标已初始化并显示");
+            };
         }
 
         /// <summary>
@@ -97,8 +214,7 @@ namespace PasteList
                 // 加载历史记录数据
                 await _viewModel.LoadHistoryAsync();
                 
-                // 注册全局快捷键
-                RegisterGlobalHotKey();
+                // 热键注册已在 OnSourceInitialized 中处理
                 
                 // 设置初始状态消息
                 _viewModel.StatusMessage = "应用程序已就绪，按 Alt+Z 可唤起窗口";
@@ -111,12 +227,21 @@ namespace PasteList
 
         /// <summary>
         /// 窗口关闭事件处理
-        /// 清理资源，停止服务，注销全局快捷键
+        /// 如果不是真正关闭，则最小化到托盘；否则清理资源
         /// </summary>
         /// <param name="sender">事件发送者</param>
         /// <param name="e">事件参数</param>
         private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            if (!_isClosing)
+            {
+                // 取消关闭，改为最小化到托盘
+                e.Cancel = true;
+                WindowState = WindowState.Minimized;
+                Hide();
+                return;
+            }
+            
             try
             {
                 // 注销全局快捷键
@@ -124,6 +249,9 @@ namespace PasteList
                 
                 // 停止剪贴板监听
                 _clipboardService?.StopListening();
+                
+                // 释放托盘图标资源
+                HideTrayIcon();
                 
                 // 释放ViewModel资源
                 _viewModel?.Dispose();
@@ -141,6 +269,66 @@ namespace PasteList
             }
         }
 
+        /// <summary>
+        /// 窗口状态变化事件处理
+        /// 当窗口最小化时隐藏到托盘
+        /// </summary>
+        /// <param name="sender">事件发送者</param>
+        /// <param name="e">事件参数</param>
+        private void MainWindow_StateChanged(object sender, EventArgs e)
+        {
+            if (WindowState == WindowState.Minimized)
+            {
+                Hide();
+                ShowTrayIcon();
+            }
+        }
+        
+        /// <summary>
+        /// 显示托盘图标
+        /// </summary>
+        private void ShowTrayIcon()
+        {
+            if (!_trayIconVisible && _trayIconData.hWnd != IntPtr.Zero)
+            {
+                Shell_NotifyIcon(NIM_ADD, ref _trayIconData);
+                _trayIconVisible = true;
+            }
+        }
+        
+        /// <summary>
+        /// 隐藏托盘图标
+        /// </summary>
+        private void HideTrayIcon()
+        {
+            if (_trayIconVisible)
+            {
+                Shell_NotifyIcon(NIM_DELETE, ref _trayIconData);
+                _trayIconVisible = false;
+            }
+        }
+        
+        /// <summary>
+        /// 恢复窗口显示
+        /// </summary>
+        private void RestoreWindow()
+        {
+            Show();
+            WindowState = WindowState.Normal;
+            Activate();
+            HideTrayIcon();
+        }
+        
+        /// <summary>
+        /// 退出应用程序
+        /// </summary>
+        private void ExitApplication()
+        {
+            _isClosing = true;
+            HideTrayIcon();
+            Application.Current.Shutdown();
+        }
+        
         /// <summary>
         /// 处理ListView双击事件
         /// 调用ViewModel中的双击命令
@@ -248,31 +436,7 @@ namespace PasteList
             }
         }
         
-        /// <summary>
-        /// 窗口消息处理程序
-        /// 处理全局快捷键消息
-        /// </summary>
-        /// <param name="hwnd">窗口句柄</param>
-        /// <param name="msg">消息类型</param>
-        /// <param name="wParam">消息参数1</param>
-        /// <param name="lParam">消息参数2</param>
-        /// <param name="handled">是否已处理</param>
-        /// <returns>处理结果</returns>
-        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-        {
-            if (msg == WM_HOTKEY)
-            {
-                int hotkeyId = wParam.ToInt32();
-                if (hotkeyId == HOTKEY_ID)
-                {
-                    // 处理 Alt+Z 快捷键
-                    OnGlobalHotKeyPressed();
-                    handled = true;
-                }
-            }
-            
-            return IntPtr.Zero;
-        }
+
         
         /// <summary>
         /// 处理全局快捷键按下事件
