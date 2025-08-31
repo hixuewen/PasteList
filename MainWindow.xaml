@@ -16,7 +16,6 @@
         
         <!-- 托盘图标 -->
         <tb:TaskbarIcon x:Name="TrayIcon"
-                        IconSource="Resources/app.ico"
                         ToolTipText="剪贴板历史记录"
                         MenuActivation="RightClick"
                         TrayMouseDoubleClick="TrayIcon_TrayMouseDoubleClick">
