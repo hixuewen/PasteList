@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -27,6 +28,9 @@ namespace PasteList.ViewModels
         private bool _isListening = false;
         private int _totalCount = 0;
         private string _statusMessage = "就绪";
+        
+        // 记录前一个活动窗口的句柄
+        private IntPtr _previousActiveWindow = IntPtr.Zero;
         
         /// <summary>
         /// 构造函数（仅用于设计时）
@@ -150,21 +154,49 @@ namespace PasteList.ViewModels
             }
         }
         
+        #endregion
+        
+        #region 命令
+        
+        /// <summary>
+        /// 开始监听命令
+        /// </summary>
+        public ICommand StartListeningCommand { get; private set; }
+        
+        /// <summary>
+        /// 停止监听命令
+        /// </summary>
+        public ICommand StopListeningCommand { get; private set; }
+        
+        /// <summary>
+        /// 双击项目命令
+        /// </summary>
+        public ICommand DoubleClickItemCommand { get; private set; }
+        
+        #endregion
+
+        /// <summary>
+        /// 记录当前活动窗口
+        /// </summary>
+        public void RecordPreviousActiveWindow()
+        {
+            _previousActiveWindow = GetForegroundWindow();
+        }
+        
         /// <summary>
         /// 处理双击历史记录项事件
         /// </summary>
         private async void OnDoubleClickItem()
         {
             if (SelectedItem == null) return;
-            
+
             try
             {
                 // 1. 将选中项的内容设置到剪贴板
                 Clipboard.SetText(SelectedItem.Content);
-                
-                StatusMessage = "内容已复制到剪贴板，正在隐藏到托盘...";
+                StatusMessage = "内容已复制，正在切换窗口并粘贴...";
 
-                // 2. 最小化并隐藏主界面到托盘
+                // 2. 最小化并隐藏主界面
                 Application.Current.Dispatcher.Invoke(() =>
                 {
                     var mainWindow = Application.Current.MainWindow;
@@ -175,259 +207,150 @@ namespace PasteList.ViewModels
                     }
                 });
                 
-                // 3. 稍微延时，让用户有时间切换到目标应用或让目标应用获得焦点
-                await Task.Delay(500);
-                
-                // 4. 将剪贴板的内容粘贴到光标所在的焦点处
+                // 确保UI更新完成
+                await Task.Delay(50);
+
+                // 3. 模拟 Alt+Tab 切换到上一个窗口
+                await SwitchToPreviousWindow();
+
+                // 4. 等待窗口切换完成并获得焦点
+                await Task.Delay(300);
+
+                // 5. 发送粘贴命令
                 await SendCtrlV();
-                
-                StatusMessage = "内容已自动粘贴到光标位置";
+                StatusMessage = "内容已自动粘贴";
             }
             catch (Exception ex)
             {
                 StatusMessage = $"操作失败: {ex.Message}";
-            }
-        }
-        
-        /// <summary>
-        /// 等待窗口切换完成
-        /// </summary>
-        /// <param name="originalWindow">原始窗口句柄</param>
-        /// <returns>是否成功切换到其他窗口</returns>
-        private async Task<bool> WaitForWindowSwitch(IntPtr originalWindow)
-        {
-            const int maxWaitTime = 1000; // 最大等待1秒
-            const int checkInterval = 50;  // 每50毫秒检查一次
-            int elapsedTime = 0;
-            
-            while (elapsedTime < maxWaitTime)
-            {
-                await Task.Delay(checkInterval);
-                elapsedTime += checkInterval;
-                
-                IntPtr currentWindow = GetForegroundWindow();
-                if (currentWindow != originalWindow && currentWindow != IntPtr.Zero)
+                // 失败时恢复窗口
+                Application.Current.Dispatcher.Invoke(() =>
                 {
-                    return true; // 成功切换到其他窗口
-                }
+                    var mainWindow = Application.Current.MainWindow;
+                    if (mainWindow != null)
+                    {
+                        mainWindow.Show();
+                        mainWindow.WindowState = WindowState.Normal;
+                        mainWindow.Activate();
+                    }
+                });
             }
-            
-            return false; // 超时，切换失败
         }
-        
+
         /// <summary>
         /// 发送Ctrl+V按键到当前活动窗口
         /// </summary>
-        private async Task SendCtrlV()
+        private Task SendCtrlV()
         {
             try
             {
-                // 等待一小段时间确保剪贴板内容已设置
-                await Task.Delay(100);
-                
                 INPUT[] inputs = new INPUT[4];
-                
-                // 按下Ctrl键
-                inputs[0] = new INPUT
-                {
-                    type = INPUT_KEYBOARD,
-                    u = new InputUnion
-                    {
-                        ki = new KEYBDINPUT
-                        {
-                            wVk = VK_CONTROL,
-                            wScan = 0,
-                            dwFlags = 0,
-                            time = 0,
-                            dwExtraInfo = IntPtr.Zero
-                        }
-                    }
-                };
-                
-                // 按下V键
-                inputs[1] = new INPUT
-                {
-                    type = INPUT_KEYBOARD,
-                    u = new InputUnion
-                    {
-                        ki = new KEYBDINPUT
-                        {
-                            wVk = VK_V,
-                            wScan = 0,
-                            dwFlags = 0,
-                            time = 0,
-                            dwExtraInfo = IntPtr.Zero
-                        }
-                    }
-                };
-                
-                // 释放V键
-                inputs[2] = new INPUT
-                {
-                    type = INPUT_KEYBOARD,
-                    u = new InputUnion
-                    {
-                        ki = new KEYBDINPUT
-                        {
-                            wVk = VK_V,
-                            wScan = 0,
-                            dwFlags = KEYEVENTF_KEYUP,
-                            time = 0,
-                            dwExtraInfo = IntPtr.Zero
-                        }
-                    }
-                };
-                
-                // 释放Ctrl键
-                inputs[3] = new INPUT
-                {
-                    type = INPUT_KEYBOARD,
-                    u = new InputUnion
-                    {
-                        ki = new KEYBDINPUT
-                        {
-                            wVk = VK_CONTROL,
-                            wScan = 0,
-                            dwFlags = KEYEVENTF_KEYUP,
-                            time = 0,
-                            dwExtraInfo = IntPtr.Zero
-                        }
-                    }
-                };
-                
-                // 发送输入
-                uint result = SendInput((uint)inputs.Length, inputs, System.Runtime.InteropServices.Marshal.SizeOf(typeof(INPUT)));
-                
-                // 如果SendInput返回0，表示失败
-                if (result == 0)
-                {
-                    StatusMessage = "自动粘贴失败，请手动按 Ctrl+V 粘贴";
-                }
+                var extraInfo = GetMessageExtraInfo();
+
+                // Press Ctrl, V, Release V, Release Ctrl
+                inputs[0] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = 0, dwExtraInfo = extraInfo } } };
+            inputs[1] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_V, dwFlags = 0, dwExtraInfo = extraInfo } } };
+            inputs[2] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_V, dwFlags = KEYEVENTF_KEYUP, dwExtraInfo = extraInfo } } };
+            inputs[3] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP, dwExtraInfo = extraInfo } } };
+
+                SendInput((uint)inputs.Length, inputs, System.Runtime.InteropServices.Marshal.SizeOf(typeof(INPUT)));
             }
             catch
             {
-                // 如果SendInput失败，回退到简单的剪贴板提示
                 StatusMessage = "自动粘贴失败，请手动按 Ctrl+V 粘贴";
             }
+            return Task.CompletedTask;
         }
-        
+
         /// <summary>
-        /// 模拟 Alt+Tab 切换到上一个窗口
+        /// 切换到之前记录的活动窗口
         /// </summary>
-        private void SwitchToPreviousWindow()
+        private async Task SwitchToPreviousWindow()
         {
-            try
+            if (_previousActiveWindow != IntPtr.Zero)
             {
-                INPUT[] inputs = new INPUT[4];
-                
+                // 直接激活之前记录的窗口
+                SetForegroundWindow(_previousActiveWindow);
+            }
+            else
+            {
+                // 如果没有记录的窗口，则使用Alt+Tab切换
+                INPUT[] inputs = new INPUT[1];
+                var extraInfo = GetMessageExtraInfo();
+
                 // Press Alt
-                inputs[0] = new INPUT 
-                { 
-                    type = INPUT_KEYBOARD, 
-                    u = new InputUnion 
-                    { 
-                        ki = new KEYBDINPUT 
-                        { 
-                            wVk = VK_MENU, 
-                            dwFlags = 0,
-                            time = 0,
-                            dwExtraInfo = IntPtr.Zero
-                        } 
-                    } 
-                };
-                
+                inputs[0] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_MENU, dwFlags = 0, dwExtraInfo = extraInfo } } };
+                SendInput(1, inputs, System.Runtime.InteropServices.Marshal.SizeOf(typeof(INPUT)));
+                await Task.Delay(50);
+
                 // Press Tab
-                inputs[1] = new INPUT 
-                { 
-                    type = INPUT_KEYBOARD, 
-                    u = new InputUnion 
-                    { 
-                        ki = new KEYBDINPUT 
-                        { 
-                            wVk = VK_TAB, 
-                            dwFlags = 0,
-                            time = 0,
-                            dwExtraInfo = IntPtr.Zero
-                        } 
-                    } 
-                };
-                
+                inputs[0].u.ki.wVk = VK_TAB;
+                inputs[0].u.ki.dwFlags = 0;
+                SendInput(1, inputs, System.Runtime.InteropServices.Marshal.SizeOf(typeof(INPUT)));
+                await Task.Delay(50);
+
                 // Release Tab
-                inputs[2] = new INPUT 
-                { 
-                    type = INPUT_KEYBOARD, 
-                    u = new InputUnion 
-                    { 
-                        ki = new KEYBDINPUT 
-                        { 
-                            wVk = VK_TAB, 
-                            dwFlags = KEYEVENTF_KEYUP,
-                            time = 0,
-                            dwExtraInfo = IntPtr.Zero
-                        } 
-                    } 
-                };
+                inputs[0].u.ki.wVk = VK_TAB;
+                inputs[0].u.ki.dwFlags = KEYEVENTF_KEYUP;
+                SendInput(1, inputs, System.Runtime.InteropServices.Marshal.SizeOf(typeof(INPUT)));
+                await Task.Delay(50);
                 
                 // Release Alt
-                inputs[3] = new INPUT 
-                { 
-                    type = INPUT_KEYBOARD, 
-                    u = new InputUnion 
-                    { 
-                        ki = new KEYBDINPUT 
-                        { 
-                            wVk = VK_MENU, 
-                            dwFlags = KEYEVENTF_KEYUP,
-                            time = 0,
-                            dwExtraInfo = IntPtr.Zero
-                        } 
-                    } 
-                };
-
-                uint result = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT)));
-                
-                if (result == 0)
-                {
-                    System.Diagnostics.Debug.WriteLine("SendInput failed for Alt+Tab");
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"SwitchToPreviousWindow failed: {ex.Message}");
+                inputs[0].u.ki.wVk = VK_MENU;
+                inputs[0].u.ki.dwFlags = KEYEVENTF_KEYUP;
+                SendInput(1, inputs, System.Runtime.InteropServices.Marshal.SizeOf(typeof(INPUT)));
             }
         }
-        
+
         #region Windows API
-        
+
         [DllImport("user32.dll")]
         private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
-        
+
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
-        
-        private const int INPUT_KEYBOARD = 1;
-        private const ushort VK_CONTROL = 0x11;
-        private const ushort VK_V = 0x56;
-        private const ushort VK_MENU = 0x12; // Alt key
-        private const ushort VK_TAB = 0x09;  // Tab key
-        private const uint KEYEVENTF_KEYUP = 0x02;
-        
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr GetMessageExtraInfo();
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        /// <summary>
+        /// INPUT结构体，用于SendInput API
+        /// </summary>
         [StructLayout(LayoutKind.Sequential)]
-        public struct INPUT
+        private struct INPUT
         {
-            public int type;
-            public InputUnion u;
+            public uint type;
+            public INPUTUNION u;
         }
-        
+
+        /// <summary>
+        /// INPUT联合体
+        /// </summary>
         [StructLayout(LayoutKind.Explicit)]
-        public struct InputUnion
+        private struct INPUTUNION
         {
             [FieldOffset(0)]
+            public MOUSEINPUT mi;
+            [FieldOffset(0)]
             public KEYBDINPUT ki;
+            [FieldOffset(0)]
+            public HARDWAREINPUT hi;
         }
-        
+
+        /// <summary>
+        /// 键盘输入结构体
+        /// </summary>
         [StructLayout(LayoutKind.Sequential)]
-        public struct KEYBDINPUT
+        private struct KEYBDINPUT
         {
             public ushort wVk;
             public ushort wScan;
@@ -435,32 +358,41 @@ namespace PasteList.ViewModels
             public uint time;
             public IntPtr dwExtraInfo;
         }
-        
-        #endregion
-        
-        #endregion
-        
-        #region 命令
-        
+
         /// <summary>
-        /// 开始监听剪贴板命令
+        /// 鼠标输入结构体
         /// </summary>
-        public ICommand StartListeningCommand { get; private set; } = null!;
-        
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MOUSEINPUT
+        {
+            public int dx;
+            public int dy;
+            public uint mouseData;
+            public uint dwFlags;
+            public uint time;
+            public IntPtr dwExtraInfo;
+        }
+
         /// <summary>
-        /// 停止监听剪贴板命令
+        /// 硬件输入结构体
         /// </summary>
-        public ICommand StopListeningCommand { get; private set; } = null!;
-        
-        /// <summary>
-        /// 双击历史记录项命令
-        /// </summary>
-        public ICommand DoubleClickItemCommand { get; private set; } = null!;
-        
+        [StructLayout(LayoutKind.Sequential)]
+        private struct HARDWAREINPUT
+        {
+            public uint uMsg;
+            public ushort wParamL;
+            public ushort wParamH;
+        }
+
+        private const int INPUT_KEYBOARD = 1;
+        private const ushort VK_CONTROL = 0x11;
+        private const ushort VK_V = 0x56;
+        private const ushort VK_MENU = 0x12; // Alt key
+        private const ushort VK_TAB = 0x09;  // Tab key
+        private const uint KEYEVENTF_KEYUP = 0x02;
+
         #endregion
-        
-        #region 私有方法
-        
+
         /// <summary>
         /// 初始化命令
         /// </summary>
@@ -480,7 +412,6 @@ namespace PasteList.ViewModels
                 execute: () => OnDoubleClickItem(),
                 canExecute: () => SelectedItem != null
             );
-
         }
         
         /// <summary>
@@ -619,8 +550,6 @@ namespace PasteList.ViewModels
                 StatusMessage = $"搜索失败: {ex.Message}";
             }
         }
-        
-        #endregion
         
         #region INotifyPropertyChanged 实现
         

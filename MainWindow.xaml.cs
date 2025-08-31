@@ -230,6 +230,9 @@ namespace PasteList
         /// </summary>
         private void RestoreWindow()
         {
+            // 在显示窗口前记录当前活动窗口
+            _viewModel.RecordPreviousActiveWindow();
+            
             Show();
             WindowState = WindowState.Normal;
             Activate();
