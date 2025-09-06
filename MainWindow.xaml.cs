@@ -40,6 +40,9 @@ namespace PasteList
         [DllImport("kernel32.dll")]
         static extern IntPtr GetModuleHandle(string lpModuleName);
         
+        [DllImport("user32.dll")]
+        static extern IntPtr GetForegroundWindow();
+        
 
         
         /// <summary>
@@ -67,14 +70,7 @@ namespace PasteList
                 case WM_HOTKEY:
                     if (wParam.ToInt32() == HOTKEY_ID)
                     {
-                        if (IsVisible)
-                        {
-                            WindowState = WindowState.Minimized;
-                        }
-                        else
-                        {
-                            RestoreWindow();
-                        }
+                        HandleGlobalHotKey();
                         handled = true;
                     }
                     break;
@@ -386,6 +382,61 @@ namespace PasteList
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"唤起窗口时发生错误: {ex.Message}");
+            }
+        }
+        
+        #endregion
+        
+        #region 全局快捷键处理
+        
+        /// <summary>
+        /// 处理全局快捷键事件
+        /// 根据当前窗口状态决定是显示还是隐藏窗口
+        /// </summary>
+        private void HandleGlobalHotKey()
+        {
+            try
+            {
+                // 获取当前前台窗口句柄
+                IntPtr foregroundWindow = GetForegroundWindow();
+                IntPtr thisWindowHandle = new WindowInteropHelper(this).Handle;
+                
+                // 检查窗口是否最小化到托盘（不可见且WindowState为Minimized）
+                bool isMinimizedToTray = !IsVisible && WindowState == WindowState.Minimized;
+                
+                // 检查窗口是否在任务栏但不在前台
+                bool isInTaskbarButNotForeground = IsVisible && 
+                                                   WindowState != WindowState.Minimized && 
+                                                   foregroundWindow != thisWindowHandle;
+                
+                // 检查窗口是否在前台
+                bool isInForeground = IsVisible && 
+                                    WindowState != WindowState.Minimized && 
+                                    foregroundWindow == thisWindowHandle;
+                
+                if (isMinimizedToTray || isInTaskbarButNotForeground)
+                {
+                    // 窗口在托盘或任务栏但非前台：显示并激活窗口
+                    RestoreWindow();
+                }
+                else if (isInForeground)
+                {
+                    // 窗口在前台：最小化到托盘
+                    WindowState = WindowState.Minimized;
+                }
+                else
+                {
+                    // 其他情况（理论上不应该发生）：显示窗口
+                    RestoreWindow();
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"快捷键处理: IsVisible={IsVisible}, WindowState={WindowState}, IsForeground={isInForeground}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"处理全局快捷键时发生错误: {ex.Message}");
+                // 出错时默认尝试显示窗口
+                RestoreWindow();
             }
         }
         
