@@ -3,6 +3,7 @@ using System.Data;
 using System.Windows;
 using System;
 using System.IO;
+using System.Threading;
 
 namespace PasteList
 {
@@ -11,11 +12,26 @@ namespace PasteList
     /// </summary>
     public partial class App : Application
     {
+        // 用于确保只有一个实例运行的互斥体
+        private static Mutex? _mutex;
+        private const string AppMutexName = "PasteList_SingleInstance_Mutex";
+        
         /// <summary>
         /// 应用程序启动时的初始化
         /// </summary>
         protected override void OnStartup(StartupEventArgs e)
         {
+            // 确保只有一个实例运行
+            _mutex = new Mutex(true, AppMutexName, out bool isNewInstance);
+            
+            if (!isNewInstance)
+            {
+                // 如果已有实例运行，显示提示并退出
+                MessageBox.Show("剪贴板历史记录应用已经在运行了！", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                Shutdown();
+                return;
+            }
+            
             // 添加全局异常处理
             this.DispatcherUnhandledException += App_DispatcherUnhandledException;
             AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
@@ -60,6 +76,18 @@ namespace PasteList
             {
                 // 忽略日志记录错误
             }
+        }
+        
+        /// <summary>
+        /// 应用程序退出时释放资源
+        /// </summary>
+        protected override void OnExit(ExitEventArgs e)
+        {
+            // 释放互斥体
+            _mutex?.ReleaseMutex();
+            _mutex?.Dispose();
+            
+            base.OnExit(e);
         }
     }
 
