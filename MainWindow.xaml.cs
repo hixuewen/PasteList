@@ -106,6 +106,7 @@ namespace PasteList
         private readonly IClipboardService _clipboardService;
         private readonly IClipboardHistoryService _historyService;
         private readonly ClipboardDbContext _dbContext;
+        private readonly IStartupService _startupService;
 
         /// <summary>
         /// 初始化MainWindow，设置数据上下文和服务
@@ -123,6 +124,7 @@ namespace PasteList
             // 初始化服务
             _clipboardService = new ClipboardService(this);
             _historyService = new ClipboardHistoryService(_dbContext);
+            _startupService = new StartupService();
             
             // 初始化ViewModel
             _viewModel = new MainWindowViewModel(_clipboardService, _historyService);
@@ -156,6 +158,9 @@ namespace PasteList
             {
                 // 加载历史记录数据
                 await _viewModel.LoadHistoryAsync();
+                
+                // 初始化开机启动菜单状态
+                InitializeStartupMenu();
                 
                 // 热键注册已在 OnSourceInitialized 中处理
                 
@@ -418,6 +423,53 @@ namespace PasteList
         private void TrayIcon_TrayMouseDoubleClick(object sender, RoutedEventArgs e)
         {
             RestoreWindow();
+        }
+        
+        #endregion
+        
+        #region 开机启动功能
+        
+        /// <summary>
+        /// 初始化开机启动菜单状态
+        /// </summary>
+        private void InitializeStartupMenu()
+        {
+            try
+            {
+                // 检查当前开机启动状态并更新菜单项
+                bool isEnabled = _startupService.IsStartupEnabled();
+                StartupMenuItem.IsChecked = isEnabled;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"初始化开机启动菜单时发生错误: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// 处理"开机启动"菜单项点击事件
+        /// </summary>
+        /// <param name="sender">事件发送者</param>
+        /// <param name="e">事件参数</param>
+        private void StartupMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // 切换开机启动状态
+                _startupService.ToggleStartup();
+                
+                // 更新菜单项状态
+                bool isEnabled = _startupService.IsStartupEnabled();
+                StartupMenuItem.IsChecked = isEnabled;
+                
+                // 显示状态消息
+                _viewModel.StatusMessage = isEnabled ? "已启用开机启动" : "已禁用开机启动";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"切换开机启动状态时发生错误: {ex.Message}");
+                MessageBox.Show($"操作失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
         
         #endregion

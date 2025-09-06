@@ -22,6 +22,7 @@
             <tb:TaskbarIcon.ContextMenu>
                 <ContextMenu>
                     <MenuItem Header="显示窗口" Click="ShowWindow_Click"/>
+                    <MenuItem Header="开机启动" x:Name="StartupMenuItem" IsCheckable="True" Click="StartupMenuItem_Click"/>
                     <Separator/>
                     <MenuItem Header="退出" Click="Exit_Click"/>
                 </ContextMenu>
@@ -70,17 +71,46 @@
                         Command="{Binding StartListeningCommand}"
                         Padding="15,5"
                         Margin="0,0,5,0"
-                        Background="#4CAF50"
-                        Foreground="White"
                         BorderThickness="0"
                         FontSize="12">
                     <Button.Style>
                         <Style TargetType="Button">
-                            <Style.Triggers>
-                                <Trigger Property="IsEnabled" Value="False">
-                                    <Setter Property="Background" Value="#CCCCCC"/>
-                                </Trigger>
-                            </Style.Triggers>
+                            <Setter Property="Background" Value="#4CAF50"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="border" 
+                                                Background="{TemplateBinding Background}" 
+                                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                                CornerRadius="3"
+                                                SnapsToDevicePixels="True">
+                                            <ContentPresenter x:Name="contentPresenter" 
+                                                            Focusable="False" 
+                                                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" 
+                                                            Margin="{TemplateBinding Padding}" 
+                                                            RecognizesAccessKey="True" 
+                                                            SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" 
+                                                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" TargetName="border" Value="#45A049"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter Property="Background" TargetName="border" Value="#388E3C"/>
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter Property="Background" TargetName="border" Value="#E0E0E0"/>
+                                                <Setter Property="Foreground" Value="#666666"/>
+                                                <Setter Property="Cursor" Value="Arrow"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
                         </Style>
                     </Button.Style>
                 </Button>
@@ -89,17 +119,46 @@
                         Content="停止监听" 
                         Command="{Binding StopListeningCommand}"
                         Padding="15,5"
-                        Background="#F44336"
-                        Foreground="White"
                         BorderThickness="0"
                         FontSize="12">
                     <Button.Style>
                         <Style TargetType="Button">
-                            <Style.Triggers>
-                                <Trigger Property="IsEnabled" Value="False">
-                                    <Setter Property="Background" Value="#CCCCCC"/>
-                                </Trigger>
-                            </Style.Triggers>
+                            <Setter Property="Background" Value="#F44336"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="border" 
+                                                Background="{TemplateBinding Background}" 
+                                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                                CornerRadius="3"
+                                                SnapsToDevicePixels="True">
+                                            <ContentPresenter x:Name="contentPresenter" 
+                                                            Focusable="False" 
+                                                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" 
+                                                            Margin="{TemplateBinding Padding}" 
+                                                            RecognizesAccessKey="True" 
+                                                            SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" 
+                                                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" TargetName="border" Value="#E53935"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter Property="Background" TargetName="border" Value="#D32F2F"/>
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter Property="Background" TargetName="border" Value="#E0E0E0"/>
+                                                <Setter Property="Foreground" Value="#666666"/>
+                                                <Setter Property="Cursor" Value="Arrow"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
                         </Style>
                     </Button.Style>
                 </Button>
