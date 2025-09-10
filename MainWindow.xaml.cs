@@ -136,6 +136,17 @@ namespace PasteList
             
             // 托盘图标已在XAML中定义，无需额外初始化
             
+            // 设置托盘图标 - 创建一个简单的图标
+            try
+            {
+                TrayIcon.Icon = CreateSimpleIcon();
+            }
+            catch (Exception ex)
+            {
+                // 如果图标创建失败，记录错误但不阻止应用启动
+                System.Diagnostics.Debug.WriteLine($"无法设置托盘图标: {ex.Message}");
+            }
+            
             // 窗口加载完成后初始化ViewModel
             Loaded += MainWindow_Loaded;
         }
@@ -231,6 +242,15 @@ namespace PasteList
         /// </summary>
         private void RestoreWindow()
         {
+            // 确保ViewModel已初始化
+            if (_viewModel == null)
+            {
+                Show();
+                WindowState = WindowState.Normal;
+                Activate();
+                return;
+            }
+            
             // 在显示窗口前记录当前活动窗口
             _viewModel.RecordPreviousActiveWindow();
             
@@ -520,6 +540,29 @@ namespace PasteList
             {
                 System.Diagnostics.Debug.WriteLine($"切换开机启动状态时发生错误: {ex.Message}");
                 MessageBox.Show($"操作失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+        #endregion
+        
+        #region 图标处理
+        
+        /// <summary>
+        /// 创建一个简单的托盘图标
+        /// </summary>
+        /// <returns>系统图标或简单图标</returns>
+        private System.Drawing.Icon CreateSimpleIcon()
+        {
+            try
+            {
+                // 尝试使用系统剪贴板图标
+                return System.Drawing.SystemIcons.Application;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"无法创建系统图标: {ex.Message}");
+                // 如果系统图标也失败，返回一个默认图标
+                return System.Drawing.SystemIcons.Information;
             }
         }
         

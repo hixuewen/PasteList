@@ -91,7 +91,9 @@ namespace PasteList.ViewModels
                 _selectedItem = value;
                 OnPropertyChanged();
                 
-
+                // 更新相关命令的可执行状态
+                ((RelayCommand)DoubleClickItemCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)DeleteItemCommand).RaiseCanExecuteChanged();
             }
         }
         
@@ -173,6 +175,11 @@ namespace PasteList.ViewModels
         /// </summary>
         public ICommand DoubleClickItemCommand { get; private set; }
         
+        /// <summary>
+        /// 删除项目命令
+        /// </summary>
+        public ICommand DeleteItemCommand { get; private set; }
+        
         #endregion
 
         /// <summary>
@@ -183,6 +190,56 @@ namespace PasteList.ViewModels
             _previousActiveWindow = GetForegroundWindow();
         }
         
+        /// <summary>
+        /// 处理删除历史记录项事件
+        /// </summary>
+        private async Task OnDeleteItem()
+        {
+            if (SelectedItem == null) return;
+
+            try
+            {
+                // 显示确认对话框
+                var result = MessageBox.Show(
+                    $"确定要删除这条记录吗？\n\n内容预览：{(SelectedItem.Content.Length > 50 ? SelectedItem.Content.Substring(0, 50) + "..." : SelectedItem.Content)}",
+                    "删除确认",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question,
+                    MessageBoxResult.No
+                );
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    // 执行删除操作
+                    var success = await _historyService.DeleteItemAsync(SelectedItem.Id);
+                    
+                    if (success)
+                    {
+                        // 从集合中移除项目
+                        ClipboardItems.Remove(SelectedItem);
+                        
+                        // 更新总数
+                        TotalCount = await _historyService.GetTotalCountAsync();
+                        
+                        // 清空选中项
+                        SelectedItem = null;
+                        
+                        StatusMessage = "记录已删除";
+                    }
+                    else
+                    {
+                        StatusMessage = "删除失败";
+                        MessageBox.Show("删除记录失败，请重试", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"删除失败: {ex.Message}";
+                MessageBox.Show($"删除记录时发生错误: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         /// <summary>
         /// 处理双击历史记录项事件
         /// </summary>
@@ -446,7 +503,7 @@ namespace PasteList.ViewModels
         private void InitializeCommands()
         {
             StartListeningCommand = new RelayCommand(
-                execute: async () => await StartListeningAsync(),
+                executeAsync: async () => await StartListeningAsync(),
                 canExecute: () => !IsListening
             );
             
@@ -457,6 +514,11 @@ namespace PasteList.ViewModels
             
             DoubleClickItemCommand = new RelayCommand(
                 execute: () => OnDoubleClickItem(),
+                canExecute: () => SelectedItem != null
+            );
+            
+            DeleteItemCommand = new RelayCommand(
+                executeAsync: async () => await OnDeleteItem(),
                 canExecute: () => SelectedItem != null
             );
         }
@@ -665,11 +727,13 @@ namespace PasteList.ViewModels
     /// </summary>
     public class RelayCommand : ICommand
     {
+        private readonly Func<Task> _executeAsync;
         private readonly Action _execute;
         private readonly Func<bool> _canExecute;
+        private readonly bool _isAsync;
         
         /// <summary>
-        /// 构造函数
+        /// 构造函数（同步版本）
         /// </summary>
         /// <param name="execute">执行方法</param>
         /// <param name="canExecute">可执行判断方法</param>
@@ -677,6 +741,19 @@ namespace PasteList.ViewModels
         {
             _execute = execute ?? throw new ArgumentNullException(nameof(execute));
             _canExecute = canExecute ?? (() => true);
+            _isAsync = false;
+        }
+        
+        /// <summary>
+        /// 构造函数（异步版本）
+        /// </summary>
+        /// <param name="executeAsync">异步执行方法</param>
+        /// <param name="canExecute">可执行判断方法</param>
+        public RelayCommand(Func<Task> executeAsync, Func<bool>? canExecute = null)
+        {
+            _executeAsync = executeAsync ?? throw new ArgumentNullException(nameof(executeAsync));
+            _canExecute = canExecute ?? (() => true);
+            _isAsync = true;
         }
         
         /// <summary>
@@ -700,7 +777,14 @@ namespace PasteList.ViewModels
         /// <param name="parameter">参数</param>
         public void Execute(object? parameter)
         {
-            _execute();
+            if (_isAsync)
+            {
+                _ = _executeAsync();
+            }
+            else
+            {
+                _execute();
+            }
         }
         
         /// <summary>
