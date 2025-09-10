@@ -174,20 +174,15 @@
                   BorderThickness="1"
                   BorderBrush="#DDDDDD"
                   MouseDoubleClick="ListView_MouseDoubleClick">
-            <ListView.View>
-                <GridView>
-                    <GridViewColumn Header="内容" Width="300">
-                        <GridViewColumn.CellTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding Content}" 
-                                          TextTrimming="CharacterEllipsis"
-                                          ToolTip="{Binding Content}"
-                                          Margin="5,2"/>
-                            </DataTemplate>
-                        </GridViewColumn.CellTemplate>
-                    </GridViewColumn>
-                </GridView>
-            </ListView.View>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding Content}" 
+                              TextTrimming="CharacterEllipsis"
+                              ToolTip="{Binding Content}"
+                              Margin="5,2"
+                              TextWrapping="NoWrap"/>
+                </DataTemplate>
+            </ListView.ItemTemplate>
             
             <!-- 右键菜单 -->
             <ListView.ContextMenu>
