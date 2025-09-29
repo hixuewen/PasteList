@@ -110,32 +110,35 @@ namespace PasteList
         public MainWindow()
         {
             InitializeComponent();
-            
+
+            // 设置窗口启动时在屏幕中央
+            WindowStartupLocation = WindowStartupLocation.CenterScreen;
+
             // 初始化数据库上下文
             _dbContext = new ClipboardDbContext();
-            
+
             // 确保数据库已创建
             _dbContext.Database.EnsureCreated();
-            
+
             // 初始化服务
             _clipboardService = new ClipboardService(this);
             _historyService = new ClipboardHistoryService(_dbContext);
             _startupService = new StartupService();
-            
+
             // 初始化ViewModel
             _viewModel = new MainWindowViewModel(_clipboardService, _historyService);
-            
+
             // 设置数据上下文
             DataContext = _viewModel;
-            
+
             // 订阅窗口关闭事件
             Closing += MainWindow_Closing;
-            
+
             // 订阅窗口状态变化事件
             StateChanged += MainWindow_StateChanged;
-            
+
             // 托盘图标已在XAML中定义，无需额外初始化
-            
+
             // 设置托盘图标 - 创建一个简单的图标
             try
             {
@@ -146,7 +149,7 @@ namespace PasteList
                 // 如果图标创建失败，记录错误但不阻止应用启动
                 System.Diagnostics.Debug.WriteLine($"无法设置托盘图标: {ex.Message}");
             }
-            
+
             // 窗口加载完成后初始化ViewModel
             Loaded += MainWindow_Loaded;
         }
