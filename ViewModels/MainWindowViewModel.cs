@@ -20,6 +20,7 @@ namespace PasteList.ViewModels
     {
         private readonly IClipboardService _clipboardService;
         private readonly IClipboardHistoryService _historyService;
+        private readonly ILoggerService _logger;
         private bool _disposed = false;
         
         private ObservableCollection<ClipboardItem> _clipboardItems;
@@ -52,15 +53,19 @@ namespace PasteList.ViewModels
         /// </summary>
         /// <param name="clipboardService">剪贴板服务</param>
         /// <param name="historyService">历史记录服务</param>
-        public MainWindowViewModel(IClipboardService clipboardService, IClipboardHistoryService historyService)
+        /// <param name="logger">日志服务</param>
+        public MainWindowViewModel(IClipboardService clipboardService, IClipboardHistoryService historyService, ILoggerService logger = null)
         {
             _clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
             _historyService = historyService ?? throw new ArgumentNullException(nameof(historyService));
+            _logger = logger;
             _clipboardItems = new ObservableCollection<ClipboardItem>();
-            
+
             InitializeCommands();
             InitializeServices();
-            
+
+            _logger?.LogInfo("ViewModel初始化完成");
+
             // 异步加载历史记录
             _ = LoadHistoryAsync();
         }
@@ -195,13 +200,27 @@ namespace PasteList.ViewModels
         /// </summary>
         private async Task OnDeleteItem()
         {
-            if (SelectedItem == null) return;
+            if (SelectedItem == null)
+            {
+                _logger?.LogWarning("尝试删除项目但SelectedItem为null");
+                return;
+            }
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             try
             {
+                string contentPreview = SelectedItem.Content.Length > 50
+                    ? SelectedItem.Content.Substring(0, 50) + "..."
+                    : SelectedItem.Content;
+
+                // 格式化删除内容用于日志记录
+                string deleteContentPreview = FormatContentForLog(SelectedItem.Content, GetContentType(SelectedItem.Content));
+                _logger?.LogUserAction("尝试删除记录", $"ID: {SelectedItem.Id}, 内容: {deleteContentPreview}");
+
                 // 显示确认对话框
                 var result = MessageBox.Show(
-                    $"确定要删除这条记录吗？\n\n内容预览：{(SelectedItem.Content.Length > 50 ? SelectedItem.Content.Substring(0, 50) + "..." : SelectedItem.Content)}",
+                    $"确定要删除这条记录吗？\n\n内容预览：{contentPreview}",
                     "删除确认",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question,
@@ -210,34 +229,104 @@ namespace PasteList.ViewModels
 
                 if (result == MessageBoxResult.Yes)
                 {
+                    // 在清空SelectedItem之前保存ID
+                    int itemId = SelectedItem.Id;
+
                     // 执行删除操作
-                    var success = await _historyService.DeleteItemAsync(SelectedItem.Id);
-                    
+                    var success = await _historyService.DeleteItemAsync(itemId);
+
                     if (success)
                     {
                         // 从集合中移除项目
                         ClipboardItems.Remove(SelectedItem);
-                        
+
                         // 更新总数
                         TotalCount = await _historyService.GetTotalCountAsync();
-                        
+
                         // 清空选中项
                         SelectedItem = null;
-                        
+
                         StatusMessage = "记录已删除";
+                        _logger?.LogInfo($"记录删除成功，ID: {itemId}, 内容: {deleteContentPreview}");
                     }
                     else
                     {
                         StatusMessage = "删除失败";
+                        _logger?.LogError($"记录删除失败，ID: {itemId}");
                         MessageBox.Show("删除记录失败，请重试", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
                     }
+                }
+                else
+                {
+                    int itemId = SelectedItem.Id;
+                    _logger?.LogUserAction("用户取消删除操作", $"ID: {itemId}, 内容: {deleteContentPreview}");
                 }
             }
             catch (Exception ex)
             {
+                _logger?.LogError(ex, "删除记录时发生错误");
                 StatusMessage = $"删除失败: {ex.Message}";
                 MessageBox.Show($"删除记录时发生错误: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+            finally
+            {
+                stopwatch.Stop();
+                _logger?.LogPerformance("删除记录操作", stopwatch.ElapsedMilliseconds);
+            }
+        }
+
+        /// <summary>
+        /// 格式化内容用于日志记录
+        /// </summary>
+        /// <param name="content">原始内容</param>
+        /// <param name="contentType">内容类型</param>
+        /// <returns>格式化后的内容</returns>
+        private string FormatContentForLog(string content, string contentType)
+        {
+            if (string.IsNullOrEmpty(content))
+                return "[空内容]";
+
+            switch (contentType)
+            {
+                case "Image":
+                    return $"[图片] Base64长度: {content.Length} 字符";
+
+                case "Files":
+                    var filePaths = content.Split(';');
+                    return $"[文件] {string.Join(", ", filePaths.Take(3))}{(filePaths.Length > 3 ? $" 等{filePaths.Length}个文件" : "")}";
+
+                default: // Text
+                    const int maxPreviewLength = 200;
+                    string preview = content.Length > maxPreviewLength
+                        ? content.Substring(0, maxPreviewLength) + "..."
+                        : content;
+
+                    // 处理特殊字符，便于日志阅读
+                    preview = preview.Replace("\r\n", "\\r\\n")
+                                 .Replace("\n", "\\n")
+                                 .Replace("\t", "\\t");
+
+                    return $"[文本] {preview}";
+            }
+        }
+
+        /// <summary>
+        /// 获取内容类型
+        /// </summary>
+        /// <param name="content">内容</param>
+        /// <returns>内容类型</returns>
+        private string GetContentType(string content)
+        {
+            if (string.IsNullOrEmpty(content))
+                return "Unknown";
+
+            if (content.StartsWith("iVBORw0KGgo"))
+                return "Image";
+
+            if (content.Contains(";"))
+                return "Files";
+
+            return "Text";
         }
 
         /// <summary>
@@ -245,12 +334,25 @@ namespace PasteList.ViewModels
         /// </summary>
         private async void OnDoubleClickItem()
         {
-            if (SelectedItem == null) return;
+            if (SelectedItem == null)
+            {
+                _logger?.LogWarning("尝试双击项目但SelectedItem为null");
+                return;
+            }
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             try
             {
+                string contentPreview = SelectedItem.Content.Length > 50
+                    ? SelectedItem.Content.Substring(0, 50) + "..."
+                    : SelectedItem.Content;
+
+                _logger?.LogUserAction("双击历史记录项", $"ID: {SelectedItem.Id}, 内容预览: {contentPreview}");
+
                 // 1. 将选中项的内容设置到剪贴板
                 Clipboard.SetText(SelectedItem.Content);
+                _logger?.LogClipboardOperation("复制到剪贴板", "Text", SelectedItem.Content.Length);
                 StatusMessage = "内容已复制，正在切换窗口并粘贴...";
 
                 // 2. 最小化并隐藏主界面
@@ -263,7 +365,7 @@ namespace PasteList.ViewModels
                         mainWindow.Hide();
                     }
                 });
-                
+
                 // 确保UI更新完成
                 await Task.Delay(30);
 
@@ -275,11 +377,16 @@ namespace PasteList.ViewModels
 
                 // 5. 发送粘贴命令
                 await SendCtrlV();
+                _logger?.LogDebug("已发送Ctrl+V粘贴命令");
                 StatusMessage = "内容已自动粘贴";
+
+                _logger?.LogInfo("双击操作完成，内容已粘贴到目标窗口");
             }
             catch (Exception ex)
             {
+                _logger?.LogError(ex, "双击操作过程中发生错误");
                 StatusMessage = $"操作失败: {ex.Message}";
+
                 // 失败时恢复窗口
                 Application.Current.Dispatcher.Invoke(() =>
                 {
@@ -291,6 +398,11 @@ namespace PasteList.ViewModels
                         mainWindow.Activate();
                     }
                 });
+            }
+            finally
+            {
+                stopwatch.Stop();
+                _logger?.LogPerformance("双击操作", stopwatch.ElapsedMilliseconds);
             }
         }
 
@@ -508,7 +620,7 @@ namespace PasteList.ViewModels
             );
             
             StopListeningCommand = new RelayCommand(
-                execute: () => StopListening(),
+                executeAsync: async () => await StopListeningAsync(),
                 canExecute: () => IsListening
             );
             
@@ -539,41 +651,83 @@ namespace PasteList.ViewModels
         /// <param name="e">事件参数</param>
         private async void OnClipboardChanged(object? sender, ClipboardChangedEventArgs e)
         {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
             try
             {
                 if (string.IsNullOrWhiteSpace(e.ClipboardItem.Content))
-                    return;
-                
-                // 保存到数据库
-                await _historyService.AddItemAsync(e.ClipboardItem);
-                
-                // 刷新界面
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
                 {
-                    await LoadHistoryAsync();
-                    StatusMessage = "已添加新项目";
+                    _logger?.LogDebug("剪贴板内容为空，跳过处理");
+                    return;
+                }
+
+                string contentType = "Text";
+                if (e.ClipboardItem.Content.StartsWith("iVBORw0KGgo")) contentType = "Image";
+                else if (e.ClipboardItem.Content.Contains(";")) contentType = "Files";
+
+                // 格式化剪贴板内容用于日志记录
+                string contentPreview = FormatContentForLog(e.ClipboardItem.Content, contentType);
+                _logger?.LogClipboardOperation("检测到变化", contentType, e.ClipboardItem.Content.Length, contentPreview);
+
+                // 保存到数据库
+                var addedItem = await _historyService.AddItemAsync(e.ClipboardItem);
+                _logger?.LogDebug("剪贴板内容已保存到数据库");
+
+                // 在UI线程中直接添加新项目到界面
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    if (addedItem != null)
+                    {
+                        // 将新项目添加到列表顶部
+                        ClipboardItems.Insert(0, addedItem);
+
+                        // 限制显示数量，避免界面过于臃肿
+                        const int maxDisplayItems = 1000;
+                        while (ClipboardItems.Count > maxDisplayItems)
+                        {
+                            ClipboardItems.RemoveAt(ClipboardItems.Count - 1);
+                        }
+
+                        // 更新总数
+                        TotalCount += 1;
+
+                        StatusMessage = "已添加新项目";
+                        _logger?.LogDebug($"新项目已添加到界面，当前总数: {TotalCount}");
+                    }
+                    else
+                    {
+                        StatusMessage = "添加项目失败";
+                        _logger?.LogWarning("AddItemAsync返回null，可能存在重复内容或其他问题");
+                    }
                 });
+
+                _logger?.LogUserAction("剪贴板内容自动添加", $"类型: {contentType}, 长度: {e.ClipboardItem.Content.Length}");
             }
             catch (Exception ex)
             {
+                _logger?.LogError(ex, "处理剪贴板变化时发生错误");
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     StatusMessage = $"添加项目失败: {ex.Message}";
                 });
+            }
+            finally
+            {
+                stopwatch.Stop();
+                _logger?.LogPerformance("剪贴板变化处理", stopwatch.ElapsedMilliseconds);
             }
         }
         
         /// <summary>
         /// 开始监听剪贴板
         /// </summary>
-        private async Task StartListeningAsync()
+        public async Task StartListeningAsync()
         {
             try
             {
                 _clipboardService.StartListening();
                 IsListening = true;
                 StatusMessage = "正在监听剪贴板...";
-                await Task.CompletedTask; // 保持异步签名
             }
             catch (Exception ex)
             {
@@ -584,7 +738,7 @@ namespace PasteList.ViewModels
         /// <summary>
         /// 停止监听剪贴板
         /// </summary>
-        private void StopListening()
+        private async Task StopListeningAsync()
         {
             try
             {
@@ -694,10 +848,20 @@ namespace PasteList.ViewModels
         {
             if (!_disposed && disposing)
             {
-                // 停止监听
+                // 停止监听（同步方式）
                 if (IsListening)
                 {
-                    StopListening();
+                    try
+                    {
+                        _clipboardService.StopListening();
+                        IsListening = false;
+                        StatusMessage = "已停止监听剪贴板";
+
+                        }
+                    catch (Exception ex)
+                    {
+                        StatusMessage = $"停止监听失败: {ex.Message}";
+                    }
                 }
                 
                 // 取消订阅事件
