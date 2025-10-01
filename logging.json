@@ -1,0 +1,24 @@
+{
+  "Logging": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "PasteList": "Debug",
+        "Microsoft": "Warning",
+        "System": "Warning"
+      }
+    },
+    "File": {
+      "Path": "Logs/PasteList-{Date}.log",
+      "RollingInterval": "Day",
+      "RetainedFileCountLimit": 30,
+      "OutputTemplate": "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}",
+      "Description": "日志文件存储在程序所在目录的Logs文件夹中"
+    },
+    "Console": {
+      "Enabled": true,
+      "OutputTemplate": "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}"
+    },
+    "Description": "日志文件位置: 程序所在目录\\Logs\\PasteList-YYYY-MM-DD.log"
+  }
+}

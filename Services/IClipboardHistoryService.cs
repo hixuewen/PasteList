@@ -14,8 +14,8 @@ namespace PasteList.Services
         /// 添加剪贴板项目
         /// </summary>
         /// <param name="item">剪贴板项目</param>
-        /// <returns>添加的项目ID</returns>
-        Task<int> AddItemAsync(ClipboardItem item);
+        /// <returns>添加的项目</returns>
+        Task<ClipboardItem?> AddItemAsync(ClipboardItem item);
         
         /// <summary>
         /// 获取所有剪贴板历史记录

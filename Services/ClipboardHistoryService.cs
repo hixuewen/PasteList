@@ -39,27 +39,27 @@ namespace PasteList.Services
         /// 添加剪贴板项目
         /// </summary>
         /// <param name="item">剪贴板项目</param>
-        /// <returns>添加的项目ID</returns>
-        public async Task<int> AddItemAsync(ClipboardItem item)
+        /// <returns>添加的项目</returns>
+        public async Task<ClipboardItem?> AddItemAsync(ClipboardItem item)
         {
             if (item == null)
                 throw new ArgumentNullException(nameof(item));
-            
+
             try
             {
                 // 检查是否存在相同内容的项目
                 var existingItem = await FindDuplicateAsync(item.Content);
                 if (existingItem != null)
                 {
-                    // 如果存在相同内容，直接返回现有项目ID
-                    return existingItem.Id;
+                    // 如果存在相同内容，返回null表示未添加新项目
+                    return null;
                 }
-                
+
                 // 添加新项目
                 _context.ClipboardItems.Add(item);
                 await _context.SaveChangesAsync();
-                
-                return item.Id;
+
+                return item;
             }
             catch (Exception ex)
             {

@@ -27,6 +27,7 @@ namespace PasteList.Services
         #endregion
         
         private readonly Window _window;
+        private readonly ILoggerService _logger;
         private HwndSource? _hwndSource;
         private bool _isListening;
         private string? _lastClipboardContent;
@@ -45,9 +46,11 @@ namespace PasteList.Services
         /// 构造函数
         /// </summary>
         /// <param name="window">主窗口实例</param>
-        public ClipboardService(Window window)
+        /// <param name="logger">日志服务</param>
+        public ClipboardService(Window window, ILoggerService logger = null)
         {
             _window = window ?? throw new ArgumentNullException(nameof(window));
+            _logger = logger;
         }
         
         /// <summary>
@@ -55,38 +58,95 @@ namespace PasteList.Services
         /// </summary>
         public void StartListening()
         {
-            if (_isListening) return;
-            
+            if (_isListening)
+            {
+                _logger?.LogDebug("剪贴板监听器已在运行，跳过启动");
+                return;
+            }
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
             try
             {
-                // 获取窗口句柄
-                _hwndSource = PresentationSource.FromVisual(_window) as HwndSource;
+                _logger?.LogInfo("开始启动剪贴板监听器");
+
+                // 获取窗口句柄，增加重试机制
+                int retryCount = 0;
+                while (_hwndSource == null && retryCount < 5)
+                {
+                    _hwndSource = PresentationSource.FromVisual(_window) as HwndSource;
+                    if (_hwndSource == null)
+                    {
+                        _logger?.LogDebug($"尝试获取窗口句柄，第 {retryCount + 1} 次失败");
+                        System.Threading.Thread.Sleep(100); // 等待100ms
+                        retryCount++;
+                    }
+                }
+
                 if (_hwndSource == null)
                 {
-                    throw new InvalidOperationException("无法获取窗口句柄");
+                    throw new InvalidOperationException("无法获取窗口句柄，请确保窗口已完全加载");
                 }
-                
+
+                _logger?.LogDebug($"成功获取窗口句柄: {_hwndSource.Handle}");
+
+                // 检查窗口句柄是否有效
+                if (_hwndSource.Handle == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException("窗口句柄无效，请确保窗口已完全加载");
+                }
+
                 // 添加消息钩子
                 _hwndSource.AddHook(WndProc);
-                
+                _logger?.LogDebug("已添加窗口消息钩子");
+
                 // 注册剪贴板格式监听器
                 if (!AddClipboardFormatListener(_hwndSource.Handle))
                 {
-                    throw new InvalidOperationException("无法注册剪贴板监听器");
+                    int error = Marshal.GetLastWin32Error();
+                    throw new InvalidOperationException($"无法注册剪贴板监听器，错误代码: {error}");
                 }
-                
+
                 _isListening = true;
-                
+
                 // 获取当前剪贴板内容作为初始状态
-                var currentContent = GetCurrentClipboardContent();
-                if (currentContent != null)
+                try
                 {
-                    _lastClipboardContent = currentContent.Content;
+                    var currentContent = GetCurrentClipboardContent();
+                    if (currentContent != null)
+                    {
+                        _lastClipboardContent = currentContent.Content;
+                        _logger?.LogDebug($"已获取初始剪贴板内容，长度: {currentContent.Content.Length}");
+                    }
                 }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning($"获取初始剪贴板内容失败: {ex.Message}");
+                }
+
+                _logger?.LogInfo("剪贴板监听器启动成功");
             }
             catch (Exception ex)
             {
+                _logger?.LogError(ex, "启动剪贴板监听器失败");
+
+                // 清理已分配的资源
+                try
+                {
+                    if (_hwndSource != null)
+                    {
+                        _hwndSource.RemoveHook(WndProc);
+                    }
+                }
+                catch { }
+
+                _isListening = false;
                 throw new InvalidOperationException($"启动剪贴板监听失败: {ex.Message}", ex);
+            }
+            finally
+            {
+                stopwatch.Stop();
+                _logger?.LogPerformance("启动剪贴板监听器", stopwatch.ElapsedMilliseconds);
             }
         }
         
@@ -221,6 +281,9 @@ namespace PasteList.Services
         {
             try
             {
+                // 延迟一小段时间，确保剪贴板数据已完全准备好
+                System.Threading.Thread.Sleep(50);
+
                 var clipboardItem = GetCurrentClipboardContent();
                 if (clipboardItem != null)
                 {
@@ -228,6 +291,7 @@ namespace PasteList.Services
                     if (_lastClipboardContent != clipboardItem.Content)
                     {
                         _lastClipboardContent = clipboardItem.Content;
+                        System.Diagnostics.Debug.WriteLine($"检测到剪贴板变化: {clipboardItem.Content?.Substring(0, Math.Min(50, clipboardItem.Content?.Length ?? 0))}...");
                         ClipboardChanged?.Invoke(this, new ClipboardChangedEventArgs(clipboardItem));
                     }
                 }

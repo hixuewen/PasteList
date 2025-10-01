@@ -15,6 +15,7 @@ using System.Windows.Shapes;
 using PasteList.ViewModels;
 using PasteList.Services;
 using PasteList.Data;
+using System.Diagnostics;
 
 namespace PasteList
 {
@@ -103,6 +104,7 @@ namespace PasteList
         private readonly IClipboardHistoryService _historyService;
         private readonly ClipboardDbContext _dbContext;
         private readonly IStartupService _startupService;
+        private readonly ILoggerService _logger;
 
         /// <summary>
         /// 初始化MainWindow，设置数据上下文和服务
@@ -114,19 +116,39 @@ namespace PasteList
             // 设置窗口启动时在屏幕中央
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-            // 初始化数据库上下文
-            _dbContext = new ClipboardDbContext();
+            // 初始化日志服务
+            _logger = new LoggerService();
+            _logger.LogApplicationStart();
 
-            // 确保数据库已创建
-            _dbContext.Database.EnsureCreated();
+            try
+            {
+                // 初始化数据库上下文
+                _dbContext = new ClipboardDbContext();
+                _logger.LogInfo("数据库上下文初始化完成");
 
-            // 初始化服务
-            _clipboardService = new ClipboardService(this);
-            _historyService = new ClipboardHistoryService(_dbContext);
-            _startupService = new StartupService();
+                // 确保数据库已创建
+                _dbContext.Database.EnsureCreated();
+                _logger.LogInfo("数据库创建或连接成功");
 
-            // 初始化ViewModel
-            _viewModel = new MainWindowViewModel(_clipboardService, _historyService);
+                // 初始化服务
+                _clipboardService = new ClipboardService(this, _logger);
+                _logger.LogInfo("剪贴板服务初始化完成");
+
+                _historyService = new ClipboardHistoryService(_dbContext);
+                _logger.LogInfo("历史记录服务初始化完成");
+
+                _startupService = new StartupService();
+                _logger.LogInfo("启动服务初始化完成");
+
+                // 初始化ViewModel
+                _viewModel = new MainWindowViewModel(_clipboardService, _historyService, _logger);
+                _logger.LogInfo("ViewModel初始化完成");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "应用程序初始化过程中发生错误");
+                throw;
+            }
 
             // 设置数据上下文
             DataContext = _viewModel;
@@ -168,12 +190,12 @@ namespace PasteList
             {
                 // 加载历史记录数据
                 await _viewModel.LoadHistoryAsync();
-                
+
                 // 初始化开机启动菜单状态
                 InitializeStartupMenu();
-                
+
                 // 热键注册已在 OnSourceInitialized 中处理
-                
+
                 // 设置初始状态消息
                 _viewModel.StatusMessage = "应用程序已就绪，按 Alt+Z 可唤起窗口";
             }
@@ -183,6 +205,7 @@ namespace PasteList
             }
         }
 
+      
         /// <summary>
         /// 窗口关闭事件处理
         /// 如果不是真正关闭，则最小化到托盘；否则清理资源
@@ -197,30 +220,49 @@ namespace PasteList
                 e.Cancel = true;
                 WindowState = WindowState.Minimized;
                 Hide();
+                _logger.LogUserAction("窗口最小化到托盘");
                 return;
             }
-            
+
             try
             {
+                _logger.LogInfo("开始清理应用程序资源");
+
                 // 注销全局快捷键
                 UnregisterGlobalHotKey();
-                
+                _logger.LogDebug("全局快捷键已注销");
+
                 // 停止剪贴板监听
-                _clipboardService?.StopListening();
-                
+                if (_clipboardService != null)
+                {
+                    _clipboardService.StopListening();
+                    _logger.LogDebug("剪贴板监听已停止");
+                }
+
                 // 释放ViewModel资源
                 _viewModel?.Dispose();
-                
+                _logger.LogDebug("ViewModel资源已释放");
+
                 // 释放历史服务资源
                 _historyService?.Dispose();
-                
+                _logger.LogDebug("历史记录服务资源已释放");
+
                 // 释放数据库上下文资源
                 _dbContext?.Dispose();
+                _logger.LogDebug("数据库上下文资源已释放");
+
+                // 释放日志服务
+                _logger?.LogApplicationShutdown();
+                if (_logger is IDisposable disposableLogger)
+                {
+                    disposableLogger.Dispose();
+                }
             }
             catch (Exception ex)
             {
                 // 记录错误但不阻止窗口关闭
                 System.Diagnostics.Debug.WriteLine($"关闭窗口时发生错误: {ex.Message}");
+                _logger?.LogError(ex, "关闭窗口时发生错误");
             }
         }
 
@@ -235,6 +277,7 @@ namespace PasteList
             if (WindowState == WindowState.Minimized)
             {
                 Hide();
+                _logger?.LogDebug("窗口已最小化并隐藏");
             }
         }
         
@@ -245,21 +288,34 @@ namespace PasteList
         /// </summary>
         private void RestoreWindow()
         {
-            // 确保ViewModel已初始化
-            if (_viewModel == null)
+            try
             {
+                _logger?.LogUserAction("恢复窗口显示");
+
+                // 确保ViewModel已初始化
+                if (_viewModel == null)
+                {
+                    Show();
+                    WindowState = WindowState.Normal;
+                    Activate();
+                    _logger?.LogWarning("恢复窗口时ViewModel为null");
+                    return;
+                }
+
+                // 在显示窗口前记录当前活动窗口
+                _viewModel.RecordPreviousActiveWindow();
+
                 Show();
                 WindowState = WindowState.Normal;
                 Activate();
-                return;
+
+                _logger?.LogDebug("窗口已恢复显示");
             }
-            
-            // 在显示窗口前记录当前活动窗口
-            _viewModel.RecordPreviousActiveWindow();
-            
-            Show();
-            WindowState = WindowState.Normal;
-            Activate();
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "恢复窗口显示时发生错误");
+                throw;
+            }
         }
         
         /// <summary>
@@ -476,9 +532,10 @@ namespace PasteList
         /// <param name="e">事件参数</param>
         private void ShowWindow_Click(object sender, RoutedEventArgs e)
         {
+            _logger?.LogUserAction("点击托盘菜单 - 显示窗口");
             RestoreWindow();
         }
-        
+
         /// <summary>
         /// 处理"退出"菜单项点击事件
         /// </summary>
@@ -486,9 +543,10 @@ namespace PasteList
         /// <param name="e">事件参数</param>
         private void Exit_Click(object sender, RoutedEventArgs e)
         {
+            _logger?.LogUserAction("点击托盘菜单 - 退出应用程序");
             ExitApplication();
         }
-        
+
         /// <summary>
         /// 处理托盘图标双击事件
         /// </summary>
@@ -496,6 +554,7 @@ namespace PasteList
         /// <param name="e">事件参数</param>
         private void TrayIcon_TrayMouseDoubleClick(object sender, RoutedEventArgs e)
         {
+            _logger?.LogUserAction("双击托盘图标");
             RestoreWindow();
         }
         
@@ -513,13 +572,15 @@ namespace PasteList
                 // 检查当前开机启动状态并更新菜单项
                 bool isEnabled = _startupService.IsStartupEnabled();
                 StartupMenuItem.IsChecked = isEnabled;
+                _logger?.LogInfo($"开机启动状态初始化完成，当前状态: {(isEnabled ? "已启用" : "已禁用")}");
             }
             catch (Exception ex)
             {
+                _logger?.LogError(ex, "初始化开机启动菜单时发生错误");
                 System.Diagnostics.Debug.WriteLine($"初始化开机启动菜单时发生错误: {ex.Message}");
             }
         }
-        
+
         /// <summary>
         /// 处理"开机启动"菜单项点击事件
         /// </summary>
@@ -530,17 +591,22 @@ namespace PasteList
             try
             {
                 // 切换开机启动状态
+                bool oldState = _startupService.IsStartupEnabled();
                 _startupService.ToggleStartup();
-                
+                bool newState = _startupService.IsStartupEnabled();
+
                 // 更新菜单项状态
-                bool isEnabled = _startupService.IsStartupEnabled();
-                StartupMenuItem.IsChecked = isEnabled;
-                
+                StartupMenuItem.IsChecked = newState;
+
                 // 显示状态消息
-                _viewModel.StatusMessage = isEnabled ? "已启用开机启动" : "已禁用开机启动";
+                string statusMessage = newState ? "已启用开机启动" : "已禁用开机启动";
+                _viewModel.StatusMessage = statusMessage;
+
+                _logger?.LogUserAction($"切换开机启动状态", $"从{(oldState ? "已启用" : "已禁用")}变更为{(newState ? "已启用" : "已禁用")}");
             }
             catch (Exception ex)
             {
+                _logger?.LogError(ex, "切换开机启动状态时发生错误");
                 System.Diagnostics.Debug.WriteLine($"切换开机启动状态时发生错误: {ex.Message}");
                 MessageBox.Show($"操作失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -551,21 +617,154 @@ namespace PasteList
         #region 图标处理
         
         /// <summary>
-        /// 创建一个简单的托盘图标
+        /// 创建一个自定义的剪贴板主题图标
         /// </summary>
-        /// <returns>系统图标或简单图标</returns>
+        /// <returns>自定义图标</returns>
         private System.Drawing.Icon CreateSimpleIcon()
         {
             try
             {
-                // 尝试使用系统剪贴板图标
-                return System.Drawing.SystemIcons.Application;
+                // 首先尝试创建高级剪贴板图标
+                return CreateClipboardIcon();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"无法创建系统图标: {ex.Message}");
-                // 如果系统图标也失败，返回一个默认图标
-                return System.Drawing.SystemIcons.Information;
+                System.Diagnostics.Debug.WriteLine($"无法创建高级图标: {ex.Message}");
+                try
+                {
+                    // 如果高级图标失败，尝试创建简单版本
+                    return CreateSimpleClipboardIcon();
+                }
+                catch (Exception ex2)
+                {
+                    System.Diagnostics.Debug.WriteLine($"无法创建简单图标: {ex2.Message}");
+                    // 最后返回系统图标
+                    return System.Drawing.SystemIcons.Application;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 创建剪贴板主题的自定义图标
+        /// </summary>
+        /// <returns>剪贴板图标</returns>
+        private System.Drawing.Icon CreateClipboardIcon()
+        {
+            // 创建32x32的位图
+            using (var bitmap = new System.Drawing.Bitmap(32, 32))
+            using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+            {
+                // 设置高质量渲染
+                graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+                // 绘制渐变背景（圆形，现代渐变效果）
+                using (var path = new System.Drawing.Drawing2D.GraphicsPath())
+                {
+                    path.AddEllipse(2, 2, 28, 28);
+                    using (var brush = new System.Drawing.Drawing2D.PathGradientBrush(path))
+                    {
+                        brush.CenterColor = System.Drawing.Color.FromArgb(70, 130, 230);  // 亮蓝色
+                        brush.SurroundColors = new System.Drawing.Color[] { System.Drawing.Color.FromArgb(0, 90, 180) };  // 深蓝色
+                        graphics.FillEllipse(brush, 2, 2, 28, 28);
+                    }
+                }
+
+                // 绘制背景边框
+                using (var pen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(255, 255, 255, 100), 1))
+                {
+                    graphics.DrawEllipse(pen, 3, 3, 26, 26);
+                }
+
+                // 绘制剪贴板图标（白色，带阴影效果）
+                // 阴影
+                using (var shadowBrush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(50, 0, 0, 0)))
+                {
+                    var shadowRect = new System.Drawing.RectangleF(9, 8, 16, 20);
+                    graphics.FillRectangle(shadowBrush, shadowRect);
+                }
+
+                // 剪贴板主体
+                using (var clipBrush = new System.Drawing.SolidBrush(System.Drawing.Color.White))
+                using (var clipPen = new System.Drawing.Pen(System.Drawing.Color.White, 1))
+                {
+                    var clipRect = new System.Drawing.RectangleF(8, 7, 16, 20);
+                    graphics.FillRectangle(clipBrush, clipRect);
+                    graphics.DrawRectangle(clipPen, clipRect.X, clipRect.Y, clipRect.Width, clipRect.Height);
+
+                    // 剪贴板夹子（金属质感）
+                    using (var clipperBrush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(200, 200, 200)))
+                    {
+                        graphics.FillEllipse(clipperBrush, 14, 5, 4, 4);
+                        graphics.DrawEllipse(clipPen, 14, 5, 4, 4);
+                    }
+
+                    // 文档线条（表示内容，更精细）
+                    graphics.DrawLine(clipPen, 11, 12, 21, 12);
+                    graphics.DrawLine(clipPen, 11, 15, 21, 15);
+                    graphics.DrawLine(clipPen, 11, 18, 18, 18);
+
+                    // 小点装饰
+                    graphics.FillEllipse(clipBrush, 20, 18, 2, 2);
+                }
+
+                // 添加光泽效果
+                using (var glossPath = new System.Drawing.Drawing2D.GraphicsPath())
+                {
+                    glossPath.AddEllipse(6, 4, 12, 12);
+                    using (var glossBrush = new System.Drawing.Drawing2D.PathGradientBrush(glossPath))
+                    {
+                        glossBrush.CenterColor = System.Drawing.Color.FromArgb(80, 255, 255, 255);
+                        glossBrush.SurroundColors = new System.Drawing.Color[] { System.Drawing.Color.Transparent };
+                        graphics.FillEllipse(glossBrush, 6, 4, 12, 12);
+                    }
+                }
+
+                // 转换为图标
+                return System.Drawing.Icon.FromHandle(bitmap.GetHicon());
+            }
+        }
+
+        /// <summary>
+        /// 创建简单的剪贴板图标（兼容性更好）
+        /// </summary>
+        /// <returns>简单剪贴板图标</returns>
+        private System.Drawing.Icon CreateSimpleClipboardIcon()
+        {
+            // 创建32x32的位图
+            using (var bitmap = new System.Drawing.Bitmap(32, 32))
+            using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+            {
+                // 设置高质量渲染
+                graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+                // 绘制背景（圆形，纯蓝色）
+                using (var brush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(0, 120, 215)))
+                {
+                    graphics.FillEllipse(brush, 2, 2, 28, 28);
+                }
+
+                // 绘制剪贴板图标（白色）
+                using (var clipBrush = new System.Drawing.SolidBrush(System.Drawing.Color.White))
+                {
+                    // 剪贴板主体
+                    var clipRect = new System.Drawing.RectangleF(8, 8, 16, 18);
+                    graphics.FillRectangle(clipBrush, clipRect);
+
+                    // 剪贴板夹子
+                    graphics.FillRectangle(clipBrush, 14, 6, 4, 3);
+
+                    // 文档线条
+                    using (var lineBrush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(0, 90, 180)))
+                    {
+                        graphics.DrawLine(new System.Drawing.Pen(lineBrush, 1), 11, 12, 21, 12);
+                        graphics.DrawLine(new System.Drawing.Pen(lineBrush, 1), 11, 15, 21, 15);
+                        graphics.DrawLine(new System.Drawing.Pen(lineBrush, 1), 11, 18, 18, 18);
+                    }
+                }
+
+                // 转换为图标
+                return System.Drawing.Icon.FromHandle(bitmap.GetHicon());
             }
         }
         
