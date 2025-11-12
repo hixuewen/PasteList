@@ -730,7 +730,8 @@ namespace PasteList.ViewModels
         {
             try
             {
-                await Task.Run(() => _clipboardService.StartListening());
+                // 直接在UI线程调用剪贴板服务，确保窗口句柄在正确的线程上下文中获取
+                _clipboardService.StartListening();
                 IsListening = true;
                 StatusMessage = "正在监听剪贴板...";
             }

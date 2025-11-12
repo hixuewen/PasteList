@@ -15,13 +15,19 @@ namespace PasteList.Services
     public class ClipboardService : IClipboardService, IDisposable
     {
         #region Windows API 声明
-        
+
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool AddClipboardFormatListener(IntPtr hwnd);
-        
+
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
-        
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool IsWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
         private const int WM_CLIPBOARDUPDATE = 0x031D;
         
         #endregion
@@ -70,22 +76,55 @@ namespace PasteList.Services
             {
                 _logger?.LogInfo("开始启动剪贴板监听器");
 
-                // 获取窗口句柄，增加重试机制
+                // 获取窗口句柄，增加重试机制和状态检查
                 int retryCount = 0;
-                while (_hwndSource == null && retryCount < 5)
+                int maxRetries = 20; // 增加重试次数
+                int retryInterval = 200; // 增加间隔时间
+
+                _logger?.LogDebug("开始获取窗口句柄...");
+
+                // 检查窗口状态
+                if (!_window.IsLoaded)
                 {
-                    _hwndSource = PresentationSource.FromVisual(_window) as HwndSource;
-                    if (_hwndSource == null)
+                    _logger?.LogWarning("窗口尚未完全加载，等待加载完成...");
+                    while (!_window.IsLoaded && retryCount < 10)
                     {
-                        _logger?.LogDebug($"尝试获取窗口句柄，第 {retryCount + 1} 次失败");
-                        System.Threading.Thread.Sleep(100); // 等待100ms
+                        System.Threading.Thread.Sleep(200);
+                        retryCount++;
+                    }
+                    if (!_window.IsLoaded)
+                    {
+                        throw new InvalidOperationException("窗口加载超时，请确保窗口已完全显示");
+                    }
+                }
+
+                retryCount = 0;
+                IntPtr windowHandle = IntPtr.Zero;
+
+                // 使用WindowInteropHelper获取窗口句柄，更可靠
+                while (windowHandle == IntPtr.Zero && retryCount < maxRetries)
+                {
+                    var windowInteropHelper = new WindowInteropHelper(_window);
+                    windowHandle = windowInteropHelper.Handle;
+
+                    if (windowHandle == IntPtr.Zero)
+                    {
+                        _logger?.LogDebug($"使用WindowInteropHelper获取窗口句柄，第 {retryCount + 1} 次失败，等待 {retryInterval}ms 后重试");
+                        System.Threading.Thread.Sleep(retryInterval);
                         retryCount++;
                     }
                 }
 
+                if (windowHandle == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException($"无法获取窗口句柄，已重试 {maxRetries} 次。请确保窗口已完全加载且可见。");
+                }
+
+                // 创建HwndSource
+                _hwndSource = HwndSource.FromHwnd(windowHandle);
                 if (_hwndSource == null)
                 {
-                    throw new InvalidOperationException("无法获取窗口句柄，请确保窗口已完全加载");
+                    throw new InvalidOperationException("无法从窗口句柄创建HwndSource，请确保窗口状态正常。");
                 }
 
                 _logger?.LogDebug($"成功获取窗口句柄: {_hwndSource.Handle}");
@@ -93,7 +132,19 @@ namespace PasteList.Services
                 // 检查窗口句柄是否有效
                 if (_hwndSource.Handle == IntPtr.Zero)
                 {
-                    throw new InvalidOperationException("窗口句柄无效，请确保窗口已完全加载");
+                    throw new InvalidOperationException("窗口句柄无效，请确保窗口已完全加载且可见");
+                }
+
+                // 额外的窗口状态检查
+                if (!_window.IsVisible)
+                {
+                    _logger?.LogWarning("窗口当前不可见，但这可能不影响剪贴板监听");
+                }
+
+                // 尝试验证窗口句柄是否真的有效
+                if (!IsWindowHandleValid(_hwndSource.Handle))
+                {
+                    throw new InvalidOperationException("窗口句柄验证失败，可能窗口已关闭或无效");
                 }
 
                 // 添加消息钩子
@@ -141,7 +192,10 @@ namespace PasteList.Services
                 catch { }
 
                 _isListening = false;
-                throw new InvalidOperationException($"启动剪贴板监听失败: {ex.Message}", ex);
+
+                // 根据异常类型提供更友好的错误信息
+                string userMessage = GetUserFriendlyErrorMessage(ex);
+                throw new InvalidOperationException(userMessage, ex);
             }
             finally
             {
@@ -254,6 +308,45 @@ namespace PasteList.Services
             }
         }
         
+        /// <summary>
+        /// 获取用户友好的错误信息
+        /// </summary>
+        /// <param name="ex">异常</param>
+        /// <returns>用户友好的错误信息</returns>
+        private string GetUserFriendlyErrorMessage(Exception ex)
+        {
+            if (ex.Message.Contains("窗口句柄") || ex.Message.Contains("窗口加载"))
+            {
+                return "启动剪贴板监听失败：窗口尚未准备就绪。\n\n解决方法：\n1. 确保应用程序窗口已完全显示\n2. 稍后再试\n3. 如果问题持续存在，请重启应用程序";
+            }
+            else if (ex.Message.Contains("剪贴板监听器") && ex.Message.Contains("错误代码"))
+            {
+                return "启动剪贴板监听失败：系统权限不足。\n\n解决方法：\n1. 请以管理员身份运行应用程序\n2. 检查其他应用程序是否正在使用剪贴板\n3. 重启计算机后重试";
+            }
+            else
+            {
+                return $"启动剪贴板监听失败：{ex.Message}\n\n请重启应用程序或联系技术支持。";
+            }
+        }
+
+        /// <summary>
+        /// 验证窗口句柄是否有效
+        /// </summary>
+        /// <param name="handle">窗口句柄</param>
+        /// <returns>是否有效</returns>
+        private bool IsWindowHandleValid(IntPtr handle)
+        {
+            try
+            {
+                return handle != IntPtr.Zero && IsWindow(handle);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning($"验证窗口句柄时发生异常: {ex.Message}");
+                return false;
+            }
+        }
+
         /// <summary>
         /// 窗口消息处理程序
         /// </summary>
