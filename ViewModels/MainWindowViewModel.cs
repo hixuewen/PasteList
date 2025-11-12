@@ -18,12 +18,12 @@ namespace PasteList.ViewModels
     /// </summary>
     public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     {
-        private readonly IClipboardService _clipboardService;
-        private readonly IClipboardHistoryService _historyService;
-        private readonly ILoggerService _logger;
+        private readonly IClipboardService _clipboardService = null!;
+        private readonly IClipboardHistoryService _historyService = null!;
+        private readonly ILoggerService? _logger;
         private bool _disposed = false;
         
-        private ObservableCollection<ClipboardItem> _clipboardItems;
+        private ObservableCollection<ClipboardItem> _clipboardItems = null!;
         private ClipboardItem? _selectedItem;
         private string _searchText = string.Empty;
         private bool _isListening = false;
@@ -54,7 +54,7 @@ namespace PasteList.ViewModels
         /// <param name="clipboardService">剪贴板服务</param>
         /// <param name="historyService">历史记录服务</param>
         /// <param name="logger">日志服务</param>
-        public MainWindowViewModel(IClipboardService clipboardService, IClipboardHistoryService historyService, ILoggerService logger = null)
+        public MainWindowViewModel(IClipboardService clipboardService, IClipboardHistoryService historyService, ILoggerService? logger = null)
         {
             _clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
             _historyService = historyService ?? throw new ArgumentNullException(nameof(historyService));
@@ -168,22 +168,22 @@ namespace PasteList.ViewModels
         /// <summary>
         /// 开始监听命令
         /// </summary>
-        public ICommand StartListeningCommand { get; private set; }
+        public ICommand StartListeningCommand { get; private set; } = null!;
         
         /// <summary>
         /// 停止监听命令
         /// </summary>
-        public ICommand StopListeningCommand { get; private set; }
+        public ICommand StopListeningCommand { get; private set; } = null!;
         
         /// <summary>
         /// 双击项目命令
         /// </summary>
-        public ICommand DoubleClickItemCommand { get; private set; }
+        public ICommand DoubleClickItemCommand { get; private set; } = null!;
         
         /// <summary>
         /// 删除项目命令
         /// </summary>
-        public ICommand DeleteItemCommand { get; private set; }
+        public ICommand DeleteItemCommand { get; private set; } = null!;
         
         #endregion
 
@@ -414,13 +414,15 @@ namespace PasteList.ViewModels
             try
             {
                 INPUT[] inputs = new INPUT[4];
+#pragma warning disable CS8602 // 解引用可能出现空引用 (GetMessageExtraInfo 不会返回 null)
                 var extraInfo = GetMessageExtraInfo();
+#pragma warning restore CS8602
 
                 // Press Ctrl, V, Release V, Release Ctrl
                 inputs[0] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = 0, dwExtraInfo = extraInfo } } };
-            inputs[1] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_V, dwFlags = 0, dwExtraInfo = extraInfo } } };
-            inputs[2] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_V, dwFlags = KEYEVENTF_KEYUP, dwExtraInfo = extraInfo } } };
-            inputs[3] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP, dwExtraInfo = extraInfo } } };
+                inputs[1] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_V, dwFlags = 0, dwExtraInfo = extraInfo } } };
+                inputs[2] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_V, dwFlags = KEYEVENTF_KEYUP, dwExtraInfo = extraInfo } } };
+                inputs[3] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP, dwExtraInfo = extraInfo } } };
 
                 SendInput((uint)inputs.Length, inputs, System.Runtime.InteropServices.Marshal.SizeOf(typeof(INPUT)));
             }
@@ -445,6 +447,9 @@ namespace PasteList.ViewModels
             {
                 // 如果没有记录的窗口，则使用Alt+Tab切换（简化版本）
                 INPUT[] inputs = new INPUT[4];
+#pragma warning disable CS8602 // 解引用可能出现空引用 (GetMessageExtraInfo 不会返回 null)
+                var extraInfo = GetMessageExtraInfo();
+#pragma warning restore CS8602
                 
                 // 按下 Alt 键
                 inputs[0] = new INPUT
@@ -458,7 +463,7 @@ namespace PasteList.ViewModels
                             wScan = 0,
                             dwFlags = 0,
                             time = 0,
-                            dwExtraInfo = GetMessageExtraInfo()
+                            dwExtraInfo = extraInfo
                         }
                     }
                 };
@@ -475,7 +480,7 @@ namespace PasteList.ViewModels
                             wScan = 0,
                             dwFlags = 0,
                             time = 0,
-                            dwExtraInfo = GetMessageExtraInfo()
+                            dwExtraInfo = extraInfo
                         }
                     }
                 };
@@ -492,7 +497,7 @@ namespace PasteList.ViewModels
                             wScan = 0,
                             dwFlags = 2, // KEYEVENTF_KEYUP
                             time = 0,
-                            dwExtraInfo = GetMessageExtraInfo()
+                            dwExtraInfo = extraInfo
                         }
                     }
                 };
@@ -509,7 +514,7 @@ namespace PasteList.ViewModels
                             wScan = 0,
                             dwFlags = 2, // KEYEVENTF_KEYUP
                             time = 0,
-                            dwExtraInfo = GetMessageExtraInfo()
+                            dwExtraInfo = extraInfo
                         }
                     }
                 };
@@ -725,7 +730,7 @@ namespace PasteList.ViewModels
         {
             try
             {
-                _clipboardService.StartListening();
+                await Task.Run(() => _clipboardService.StartListening());
                 IsListening = true;
                 StatusMessage = "正在监听剪贴板...";
             }
@@ -742,7 +747,7 @@ namespace PasteList.ViewModels
         {
             try
             {
-                _clipboardService.StopListening();
+                await Task.Run(() => _clipboardService.StopListening());
                 IsListening = false;
                 StatusMessage = "已停止监听剪贴板";
             }
@@ -751,12 +756,6 @@ namespace PasteList.ViewModels
                 StatusMessage = $"停止监听失败: {ex.Message}";
             }
         }
-        
-
-        
-
-        
-
         
         /// <summary>
         /// 加载历史记录
@@ -776,8 +775,6 @@ namespace PasteList.ViewModels
                 
                 TotalCount = totalCount;
                 StatusMessage = $"已加载 {items.Count} 个项目";
-                
-
             }
             catch (Exception ex)
             {
@@ -856,8 +853,7 @@ namespace PasteList.ViewModels
                         _clipboardService.StopListening();
                         IsListening = false;
                         StatusMessage = "已停止监听剪贴板";
-
-                        }
+                    }
                     catch (Exception ex)
                     {
                         StatusMessage = $"停止监听失败: {ex.Message}";
@@ -891,8 +887,8 @@ namespace PasteList.ViewModels
     /// </summary>
     public class RelayCommand : ICommand
     {
-        private readonly Func<Task> _executeAsync;
-        private readonly Action _execute;
+        private readonly Func<Task>? _executeAsync;
+        private readonly Action? _execute;
         private readonly Func<bool> _canExecute;
         private readonly bool _isAsync;
         
@@ -943,11 +939,11 @@ namespace PasteList.ViewModels
         {
             if (_isAsync)
             {
-                _ = _executeAsync();
+                _ = _executeAsync?.Invoke();
             }
             else
             {
-                _execute();
+                _execute?.Invoke();
             }
         }
         

@@ -51,9 +51,9 @@ namespace PasteList.Services
             _config = LoggingConfiguration.LoadFromFile();
 
             // 设置日志目录到程序所在目录
-            string assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            string assemblyDirectory = Path.GetDirectoryName(assemblyLocation);
-            _logDirectory = Path.Combine(assemblyDirectory, "Logs");
+            string? assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string? assemblyDirectory = Path.GetDirectoryName(assemblyLocation);
+            _logDirectory = Path.Combine(assemblyDirectory ?? ".", "Logs");
 
             // 确保日志目录存在
             Directory.CreateDirectory(_logDirectory);
@@ -84,9 +84,9 @@ namespace PasteList.Services
             _config = config ?? throw new ArgumentNullException(nameof(config));
 
             // 设置日志目录到程序所在目录
-            string assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            string assemblyDirectory = Path.GetDirectoryName(assemblyLocation);
-            _logDirectory = Path.Combine(assemblyDirectory, "Logs");
+            string? assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string? assemblyDirectory = Path.GetDirectoryName(assemblyLocation);
+            _logDirectory = Path.Combine(assemblyDirectory ?? ".", "Logs");
 
             // 确保日志目录存在
             Directory.CreateDirectory(_logDirectory);

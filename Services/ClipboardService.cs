@@ -27,7 +27,7 @@ namespace PasteList.Services
         #endregion
         
         private readonly Window _window;
-        private readonly ILoggerService _logger;
+        private readonly ILoggerService? _logger;
         private HwndSource? _hwndSource;
         private bool _isListening;
         private string? _lastClipboardContent;
@@ -47,7 +47,7 @@ namespace PasteList.Services
         /// </summary>
         /// <param name="window">主窗口实例</param>
         /// <param name="logger">日志服务</param>
-        public ClipboardService(Window window, ILoggerService logger = null)
+        public ClipboardService(Window window, ILoggerService? logger = null)
         {
             _window = window ?? throw new ArgumentNullException(nameof(window));
             _logger = logger;
