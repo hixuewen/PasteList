@@ -191,9 +191,6 @@ namespace PasteList
                 // 加载历史记录数据
                 await _viewModel.LoadHistoryAsync();
 
-                // 初始化开机启动菜单状态
-                InitializeStartupMenu();
-
                 // 热键注册已在 OnSourceInitialized 中处理
 
                 // 设置初始状态消息
@@ -537,6 +534,32 @@ namespace PasteList
         }
 
         /// <summary>
+        /// 处理"设置"菜单项点击事件
+        /// </summary>
+        /// <param name="sender">事件发送者</param>
+        /// <param name="e">事件参数</param>
+        private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _logger?.LogUserAction("点击托盘菜单 - 设置");
+
+                // 创建设置窗口
+                var settingsWindow = new SettingsWindow(_startupService, _logger);
+                settingsWindow.Owner = this;
+
+                // 显示设置窗口（模态对话框）
+                settingsWindow.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "打开设置窗口时发生错误");
+                System.Diagnostics.Debug.WriteLine($"打开设置窗口时发生错误: {ex.Message}");
+                MessageBox.Show($"打开设置窗口失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
         /// 处理"退出"菜单项点击事件
         /// </summary>
         /// <param name="sender">事件发送者</param>
@@ -557,63 +580,9 @@ namespace PasteList
             _logger?.LogUserAction("双击托盘图标");
             RestoreWindow();
         }
-        
+
         #endregion
-        
-        #region 开机启动功能
-        
-        /// <summary>
-        /// 初始化开机启动菜单状态
-        /// </summary>
-        private void InitializeStartupMenu()
-        {
-            try
-            {
-                // 检查当前开机启动状态并更新菜单项
-                bool isEnabled = _startupService.IsStartupEnabled();
-                StartupMenuItem.IsChecked = isEnabled;
-                _logger?.LogInfo($"开机启动状态初始化完成，当前状态: {(isEnabled ? "已启用" : "已禁用")}");
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "初始化开机启动菜单时发生错误");
-                System.Diagnostics.Debug.WriteLine($"初始化开机启动菜单时发生错误: {ex.Message}");
-            }
-        }
 
-        /// <summary>
-        /// 处理"开机启动"菜单项点击事件
-        /// </summary>
-        /// <param name="sender">事件发送者</param>
-        /// <param name="e">事件参数</param>
-        private void StartupMenuItem_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                // 切换开机启动状态
-                bool oldState = _startupService.IsStartupEnabled();
-                _startupService.ToggleStartup();
-                bool newState = _startupService.IsStartupEnabled();
-
-                // 更新菜单项状态
-                StartupMenuItem.IsChecked = newState;
-
-                // 显示状态消息
-                string statusMessage = newState ? "已启用开机启动" : "已禁用开机启动";
-                _viewModel.StatusMessage = statusMessage;
-
-                _logger?.LogUserAction($"切换开机启动状态", $"从{(oldState ? "已启用" : "已禁用")}变更为{(newState ? "已启用" : "已禁用")}");
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "切换开机启动状态时发生错误");
-                System.Diagnostics.Debug.WriteLine($"切换开机启动状态时发生错误: {ex.Message}");
-                MessageBox.Show($"操作失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-        
-        #endregion
-        
         #region 图标处理
         
         /// <summary>
