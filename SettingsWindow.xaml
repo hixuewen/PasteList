@@ -22,20 +22,10 @@
                 <TextBlock Text="应用程序设置" FontSize="18" FontWeight="Bold" Margin="0,0,0,20"/>
 
                 <!-- 开机启动设置 -->
-                <Border BorderBrush="#DDDDDD" BorderThickness="1" Padding="15" CornerRadius="4">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <TextBlock Text="开机启动" FontSize="14" FontWeight="SemiBold"/>
-                        </StackPanel>
-                        <TextBlock Text="开机启动后，剪贴板历史记录将在系统启动时自动开始监听。"
-                                   FontSize="12" Foreground="#666666"
-                                   TextWrapping="Wrap"/>
-                        <CheckBox Content="启用开机启动"
-                                  IsChecked="{Binding IsStartupEnabled}"
-                                  Margin="0,10,0,0"
-                                  FontSize="13"/>
-                    </StackPanel>
-                </Border>
+                <CheckBox Content="开启启动"
+                          IsChecked="{Binding IsStartupEnabled}"
+                          Margin="0,10,0,0"
+                          FontSize="13"/>
 
                 <!-- 未来扩展预留区域 -->
                 <Border BorderBrush="#EEEEEE" BorderThickness="1" Padding="15" CornerRadius="4" Margin="0,10,0,0">
@@ -49,7 +39,7 @@
         <Border Grid.Row="1" Background="#F5F5F5" Padding="20">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="确定" Width="80" Height="30"
-                        Command="{Binding SaveCommand}"
+                        Click="SaveButton_Click"
                         Margin="0,0,10,0">
                     <Button.Style>
                         <Style TargetType="Button">
@@ -89,7 +79,7 @@
                 </Button>
 
                 <Button Content="取消" Width="80" Height="30"
-                        Command="{Binding CancelCommand}">
+                        Click="CancelButton_Click">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Background" Value="#9E9E9E"/>

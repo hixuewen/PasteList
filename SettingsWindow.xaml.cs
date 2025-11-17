@@ -11,6 +11,7 @@ namespace PasteList
     public partial class SettingsWindow : Window
     {
         private readonly SettingsViewModel _viewModel;
+        private bool _saveClicked = false;
 
         /// <summary>
         /// 构造函数
@@ -27,9 +28,6 @@ namespace PasteList
 
             // 绑定窗口加载事件
             this.Loaded += Window_Loaded;
-
-            // 窗口关闭事件处理
-            this.Closing += SettingsWindow_Closing;
         }
 
         /// <summary>
@@ -52,13 +50,36 @@ namespace PasteList
         }
 
         /// <summary>
-        /// 窗口关闭事件处理
+        /// 处理确定按钮点击事件
         /// </summary>
-        /// <param name="sender">事件发送者</param>
-        /// <param name="e">事件参数</param>
-        private void SettingsWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+        private void SaveButton_Click(object sender, RoutedEventArgs e)
         {
-            // 如果有关闭按钮事件处理，会在这里处理
+            try
+            {
+                _saveClicked = true;
+                _viewModel.SaveCommand.Execute(null);
+                Close();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"保存设置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// 处理取消按钮点击事件
+        /// </summary>
+        private void CancelButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _viewModel.CancelCommand.Execute(null);
+                Close();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"取消设置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 }
