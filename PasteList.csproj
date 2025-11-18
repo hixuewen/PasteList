@@ -21,4 +21,8 @@
     <Resource Include="Resources\clipboard-icon.svg" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
 </Project>

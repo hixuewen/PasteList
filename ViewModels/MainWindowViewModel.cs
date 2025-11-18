@@ -20,6 +20,7 @@ namespace PasteList.ViewModels
     {
         private readonly IClipboardService _clipboardService = null!;
         private readonly IClipboardHistoryService _historyService = null!;
+        private readonly IAutoSyncService? _autoSyncService;
         private readonly ILoggerService? _logger;
         private bool _disposed = false;
         
@@ -54,10 +55,11 @@ namespace PasteList.ViewModels
         /// <param name="clipboardService">剪贴板服务</param>
         /// <param name="historyService">历史记录服务</param>
         /// <param name="logger">日志服务</param>
-        public MainWindowViewModel(IClipboardService clipboardService, IClipboardHistoryService historyService, ILoggerService? logger = null)
+        public MainWindowViewModel(IClipboardService clipboardService, IClipboardHistoryService historyService, IAutoSyncService? autoSyncService = null, ILoggerService? logger = null)
         {
             _clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
             _historyService = historyService ?? throw new ArgumentNullException(nameof(historyService));
+            _autoSyncService = autoSyncService;
             _logger = logger;
             _clipboardItems = new ObservableCollection<ClipboardItem>();
 
@@ -720,6 +722,19 @@ namespace PasteList.ViewModels
             {
                 stopwatch.Stop();
                 _logger?.LogPerformance("剪贴板变化处理", stopwatch.ElapsedMilliseconds);
+            }
+
+            // 触发自动同步
+            if (_autoSyncService != null)
+            {
+                try
+                {
+                    await _autoSyncService.OnClipboardChangedAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "触发自动同步时发生错误");
+                }
             }
         }
         

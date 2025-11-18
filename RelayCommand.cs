@@ -69,6 +69,28 @@ namespace PasteList
         }
 
         /// <summary>
+        /// 异步执行命令
+        /// </summary>
+        /// <param name="parameter">参数</param>
+        /// <returns>异步任务</returns>
+        public async Task ExecuteAsync(object? parameter)
+        {
+            if (_isAsync && _executeAsync != null)
+            {
+                await _executeAsync.Invoke();
+            }
+            else if (!_isAsync)
+            {
+                _execute?.Invoke();
+                await Task.CompletedTask;
+            }
+            else
+            {
+                await Task.CompletedTask;
+            }
+        }
+
+        /// <summary>
         /// 触发可执行状态变化事件
         /// </summary>
         public void RaiseCanExecuteChanged()

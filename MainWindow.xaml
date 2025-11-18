@@ -24,6 +24,7 @@
                 <ContextMenu>
                     <MenuItem Header="显示窗口" Click="ShowWindow_Click"/>
                     <MenuItem Header="设置" Click="SettingsMenuItem_Click"/>
+                    <MenuItem Header="同步状态" Click="SyncStatusMenuItem_Click"/>
                     <Separator/>
                     <MenuItem Header="退出" Click="Exit_Click"/>
                 </ContextMenu>

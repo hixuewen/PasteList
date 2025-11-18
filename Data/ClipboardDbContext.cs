@@ -14,7 +14,12 @@ namespace PasteList.Data
         /// 剪贴板项目数据集
         /// </summary>
         public DbSet<ClipboardItem> ClipboardItems { get; set; }
-        
+
+        /// <summary>
+        /// 同步配置数据集
+        /// </summary>
+        public DbSet<SyncConfiguration> SyncConfigurations { get; set; }
+
         /// <summary>
         /// 构造函数
         /// </summary>
@@ -67,11 +72,32 @@ namespace PasteList.Data
             {
                 // 设置主键
                 entity.HasKey(e => e.Id);
-                
+
                 // 配置属性
                 entity.Property(e => e.Content)
                     .IsRequired()
                     .HasMaxLength(10000); // 限制内容最大长度
+            });
+
+            // 配置SyncConfiguration实体
+            modelBuilder.Entity<SyncConfiguration>(entity =>
+            {
+                // 设置主键
+                entity.HasKey(e => e.Id);
+
+                // 配置属性
+                entity.Property(e => e.SyncType)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.Property(e => e.ConfigData)
+                    .HasMaxLength(5000);
+
+                entity.Property(e => e.CreatedAt)
+                    .IsRequired();
+
+                entity.Property(e => e.UpdatedAt)
+                    .IsRequired();
             });
         }
         

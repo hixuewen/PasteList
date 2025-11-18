@@ -17,13 +17,14 @@ namespace PasteList
         /// 构造函数
         /// </summary>
         /// <param name="startupService">启动服务</param>
+        /// <param name="syncConfigurationService">同步配置服务</param>
         /// <param name="logger">日志服务</param>
-        public SettingsWindow(IStartupService startupService, ILoggerService? logger)
+        public SettingsWindow(IStartupService startupService, ISyncConfigurationService syncConfigurationService, ILoggerService? logger)
         {
             InitializeComponent();
 
             // 初始化ViewModel
-            _viewModel = new SettingsViewModel(startupService, logger);
+            _viewModel = new SettingsViewModel(startupService, syncConfigurationService, logger);
             DataContext = _viewModel;
 
             // 绑定窗口加载事件
@@ -35,12 +36,12 @@ namespace PasteList
         /// </summary>
         /// <param name="sender">事件发送者</param>
         /// <param name="e">事件参数</param>
-        private void Window_Loaded(object sender, RoutedEventArgs e)
+        private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
             try
             {
                 // 加载当前设置
-                _viewModel.LoadSettings();
+                await _viewModel.LoadSettingsAsync();
             }
             catch (Exception ex)
             {
@@ -52,12 +53,24 @@ namespace PasteList
         /// <summary>
         /// 处理确定按钮点击事件
         /// </summary>
-        private void SaveButton_Click(object sender, RoutedEventArgs e)
+        private async void SaveButton_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 _saveClicked = true;
-                _viewModel.SaveCommand.Execute(null);
+
+                // 等待异步保存操作完成
+                if (_viewModel.SaveCommand is RelayCommand relayCommand)
+                {
+                    await relayCommand.ExecuteAsync(null);
+                }
+                else
+                {
+                    _viewModel.SaveCommand.Execute(null);
+                    // 如果不是异步命令，给一个短暂延迟以确保操作完成
+                    await Task.Delay(100);
+                }
+
                 Close();
             }
             catch (Exception ex)
