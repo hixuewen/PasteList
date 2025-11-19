@@ -40,17 +40,16 @@ namespace PasteList.ViewModels
             _autoSyncService = autoSyncService ?? throw new ArgumentNullException(nameof(autoSyncService));
             _loggerService = loggerService;
 
-            // 初始化命令
-            SyncNowCommand = new RelayCommand(async () => await SyncNowAsync(), () => !_isRefreshing);
+            // 初始化命令 - 同时检查刷新状态和自动同步状态
+            SyncNowCommand = new RelayCommand(
+                async () => await SyncNowAsync(),
+                () => !_isRefreshing && !_autoSyncService.GetCurrentStatus().IsSyncing);
             RefreshCommand = new RelayCommand(async () => await RefreshAsync(), () => !_isRefreshing);
             ClearHistoryCommand = new RelayCommand(async () => await ClearHistoryAsync(), () => _syncHistory.Count > 0);
 
             // 订阅事件
             _autoSyncService.StatusChanged += OnAutoSyncStatusChanged;
             _syncService.SyncCompleted += OnSyncCompleted;
-
-            // 异步加载初始数据
-            _ = Task.Run(async () => await InitializeAsync());
         }
 
         #region 属性
@@ -148,7 +147,7 @@ namespace PasteList.ViewModels
         /// <summary>
         /// 初始化
         /// </summary>
-        private async Task InitializeAsync()
+        internal async Task InitializeAsync()
         {
             await RefreshAsync();
             UpdateSyncStatus();
@@ -159,24 +158,62 @@ namespace PasteList.ViewModels
         /// </summary>
         private async Task SyncNowAsync()
         {
+            _loggerService?.LogDebug("开始执行手动同步...");
+
+            // 检查自动同步是否正在进行
+            var currentStatus = _autoSyncService.GetCurrentStatus();
+
+            if (currentStatus.IsSyncing)
+            {
+                _loggerService?.LogDebug("手动同步被忽略：自动同步正在进行");
+                CurrentStatus = "自动同步进行中，无法手动同步";
+                return;
+            }
+
+            if (_isRefreshing)
+            {
+                _loggerService?.LogDebug("手动同步被忽略：正在刷新数据");
+                return;
+            }
+
+            _isRefreshing = true;
+            // 通知命令状态已更新，使按钮正确显示为禁用状态
+            ((RelayCommand)SyncNowCommand).RaiseCanExecuteChanged();
+            ((RelayCommand)RefreshCommand).RaiseCanExecuteChanged();
+
             try
             {
                 var config = await _configService.GetCurrentConfigurationAsync();
                 if (config?.IsEnabled != true)
                 {
-                    MessageBox.Show("同步功能未启用", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    _loggerService?.LogDebug("同步被忽略：同步功能未启用");
+                    CurrentStatus = "同步功能未启用";
                     return;
                 }
 
                 CurrentStatus = "正在手动同步...";
+                _loggerService?.LogInfo("开始执行手动同步操作");
+
                 await _autoSyncService.ManualSyncAsync("手动同步");
+
                 _loggerService?.LogUserAction("执行手动同步", "通过同步状态窗口");
+                _loggerService?.LogDebug("手动同步操作完成");
             }
             catch (Exception ex)
             {
-                CurrentStatus = $"同步失败: {ex.Message}";
+                var errorMessage = $"同步失败: {ex.Message}";
+                CurrentStatus = errorMessage;
                 _loggerService?.LogError(ex, "手动同步失败");
-                MessageBox.Show($"同步失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+
+                // 由于 RelayCommand 在UI线程执行，可以直接显示 MessageBox
+                MessageBox.Show(errorMessage, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                _isRefreshing = false;
+                // 通知命令状态已更新，使按钮正确显示为启用状态
+                ((RelayCommand)SyncNowCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)RefreshCommand).RaiseCanExecuteChanged();
             }
         }
 
@@ -185,43 +222,67 @@ namespace PasteList.ViewModels
         /// </summary>
         private async Task RefreshAsync()
         {
-            if (_isRefreshing) return;
-
-            _isRefreshing = true;
             try
             {
-                // 加载同步历史
-                var history = await _syncService.GetSyncHistoryAsync(100);
-                App.Current.Dispatcher.Invoke(() =>
+                // 检查自动同步是否正在进行
+                if (_autoSyncService.GetCurrentStatus().IsSyncing)
                 {
-                    SyncHistory.Clear();
-                    foreach (var entry in history)
+                    _loggerService?.LogDebug("刷新被延迟：自动同步正在进行");
+                    // 等待自动同步完成
+                    while (_autoSyncService.GetCurrentStatus().IsSyncing)
                     {
-                        SyncHistory.Add(entry);
+                        await Task.Delay(100);
                     }
-                });
+                }
 
-                // 更新统计信息
-                OnPropertyChanged(nameof(SyncCount));
-                OnPropertyChanged(nameof(SuccessCount));
-                OnPropertyChanged(nameof(ErrorCount));
+                if (_isRefreshing) return;
 
-                // 更新配置信息
-                await UpdateConfigurationInfoAsync();
+                _isRefreshing = true;
+                // 通知命令状态已更新，使按钮正确显示为禁用状态
+                ((RelayCommand)SyncNowCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)RefreshCommand).RaiseCanExecuteChanged();
 
-                // 更新当前状态
-                UpdateSyncStatus();
+                try
+                {
+                    // 加载同步历史
+                    var history = await _syncService.GetSyncHistoryAsync(100);
+                    App.Current.Dispatcher.Invoke(() =>
+                    {
+                        SyncHistory.Clear();
+                        foreach (var entry in history)
+                        {
+                            SyncHistory.Add(entry);
+                        }
+                    });
 
-                _loggerService?.LogDebug("同步状态已刷新");
-            }
-            catch (Exception ex)
-            {
-                _loggerService?.LogError(ex, "刷新同步状态失败");
-                MessageBox.Show($"刷新失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    // 更新统计信息
+                    OnPropertyChanged(nameof(SyncCount));
+                    OnPropertyChanged(nameof(SuccessCount));
+                    OnPropertyChanged(nameof(ErrorCount));
+
+                    // 更新配置信息
+                    await UpdateConfigurationInfoAsync();
+
+                    // 更新当前状态
+                    UpdateSyncStatus();
+
+                    _loggerService?.LogDebug("同步状态已刷新");
+                }
+                catch (Exception ex)
+                {
+                    var errorMessage = $"刷新失败: {ex.Message}";
+                    _loggerService?.LogError(ex, "刷新同步状态失败");
+
+                    // 由于 RelayCommand 在UI线程执行，可以直接显示 MessageBox
+                    MessageBox.Show(errorMessage, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
             finally
             {
                 _isRefreshing = false;
+                // 通知命令状态已更新，使按钮正确显示为启用状态
+                ((RelayCommand)SyncNowCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)RefreshCommand).RaiseCanExecuteChanged();
             }
         }
 
@@ -232,8 +293,12 @@ namespace PasteList.ViewModels
         {
             try
             {
-                var result = MessageBox.Show("确定要清空所有同步历史记录吗？", "确认",
-                    MessageBoxButton.YesNo, MessageBoxImage.Question);
+                // 确保在 UI 线程上显示确认对话框
+                var result = await App.Current?.Dispatcher.InvokeAsync(() =>
+                {
+                    return MessageBox.Show("确定要清空所有同步历史记录吗？", "确认",
+                        MessageBoxButton.YesNo, MessageBoxImage.Question);
+                }).Task;
 
                 if (result == MessageBoxResult.Yes)
                 {
@@ -244,8 +309,11 @@ namespace PasteList.ViewModels
             }
             catch (Exception ex)
             {
+                var errorMessage = $"清空失败: {ex.Message}";
                 _loggerService?.LogError(ex, "清空同步历史失败");
-                MessageBox.Show($"清空失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+
+                // 由于 RelayCommand 在UI线程执行，可以直接显示 MessageBox
+                MessageBox.Show(errorMessage, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -355,6 +423,16 @@ namespace PasteList.ViewModels
             App.Current.Dispatcher.Invoke(() =>
             {
                 CurrentStatus = e.Message;
+
+                // 根据同步状态更新命令的可用性
+                if (SyncNowCommand is RelayCommand syncCmd)
+                {
+                    syncCmd.RaiseCanExecuteChanged();
+                }
+                if (RefreshCommand is RelayCommand refreshCmd)
+                {
+                    refreshCmd.RaiseCanExecuteChanged();
+                }
             });
         }
 
@@ -363,6 +441,14 @@ namespace PasteList.ViewModels
         /// </summary>
         private async void OnSyncCompleted(object? sender, SyncCompletedEventArgs e)
         {
+            // 如果当前正在刷新状态，避免竞态条件，延迟刷新
+            if (_isRefreshing)
+            {
+                // 延迟500ms后再次检查，如果仍在刷新则等待完成
+                await Task.Delay(500);
+                if (_isRefreshing) return; // 如果仍在刷新，跳过此次刷新
+            }
+
             await RefreshAsync();
         }
 

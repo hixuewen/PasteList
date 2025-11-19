@@ -150,6 +150,8 @@ namespace PasteList.Services
         /// </summary>
         public AutoSyncStatus GetCurrentStatus()
         {
+            // 确保 _status.IsSyncing 与内部 _isSyncing 字段保持同步
+            _status.IsSyncing = _isSyncing;
             return _status;
         }
 
@@ -168,23 +170,46 @@ namespace PasteList.Services
         /// </summary>
         private async Task PerformAutoSyncAsync(string reason)
         {
-            if (_isSyncing || _isDisposed) return;
+            if (_isSyncing || _isDisposed)
+            {
+                _loggerService?.LogDebug($"同步被忽略: 已在进行中或已释放");
+                return;
+            }
 
             lock (_syncLock)
             {
-                if (_isSyncing) return;
+                if (_isSyncing)
+                {
+                    _loggerService?.LogDebug("同步被忽略: 锁检查失败");
+                    return;
+                }
                 _isSyncing = true;
             }
 
             try
             {
                 var config = await _configService.GetCurrentConfigurationAsync();
-                if (config?.IsEnabled != true || config.SyncType != "LocalFile")
+                if (config?.IsEnabled != true)
+                {
+                    _loggerService?.LogDebug("同步被忽略: 同步功能未启用");
+                    OnStatusChanged(new AutoSyncStatusEventArgs("同步功能未启用", false));
                     return;
+                }
+
+                if (config.SyncType != "LocalFile")
+                {
+                    _loggerService?.LogDebug($"同步被忽略: 当前同步类型为 {config.SyncType}，仅支持 LocalFile 类型");
+                    OnStatusChanged(new AutoSyncStatusEventArgs($"当前同步类型 ({config.SyncType}) 不支持手动同步", false));
+                    return;
+                }
 
                 var localConfig = GetLocalFileConfig(config);
                 if (string.IsNullOrEmpty(localConfig.SyncFolderPath))
+                {
+                    _loggerService?.LogDebug("同步被忽略: 同步文件夹路径未配置");
+                    OnStatusChanged(new AutoSyncStatusEventArgs("同步文件夹路径未配置", false));
                     return;
+                }
 
                 OnStatusChanged(new AutoSyncStatusEventArgs($"正在执行{reason}...", true));
                 _status.IsSyncing = true;

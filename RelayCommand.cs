@@ -60,11 +60,23 @@ namespace PasteList
         {
             if (_isAsync)
             {
-                _ = _executeAsync?.Invoke();
+                // 异步命令直接在 UI 线程执行（通过 ICommand.Execute 本身就在UI线程）
+                ExecuteAsyncInternal();
             }
             else
             {
                 _execute?.Invoke();
+            }
+        }
+
+        /// <summary>
+        /// 内部异步执行方法 - 使用 async void 避免阻塞UI线程
+        /// </summary>
+        private async void ExecuteAsyncInternal()
+        {
+            if (_executeAsync != null)
+            {
+                await _executeAsync.Invoke();
             }
         }
 

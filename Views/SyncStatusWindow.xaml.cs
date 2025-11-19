@@ -28,6 +28,12 @@ namespace PasteList.Views
 
             // 订阅窗口关闭事件
             Closing += SyncStatusWindow_Closing;
+
+            // 窗口加载完成后异步初始化数据
+            Loaded += (s, e) =>
+            {
+                _ = Task.Run(async () => await _viewModel.InitializeAsync());
+            };
         }
 
         /// <summary>
