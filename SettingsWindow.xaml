@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="设置" Height="850" Width="450"
+        Title="设置" Height="950" Width="450"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         WindowStyle="SingleBorderWindow"
@@ -52,10 +52,11 @@
                               Height="25"
                               Padding="5">
                         <ComboBoxItem Content="LocalFile" Tag="LocalFile"/>
+                        <ComboBoxItem Content="Server" Tag="Server"/>
                         <ComboBoxItem Content="OneDrive" Tag="OneDrive" IsEnabled="False"/>
                         <ComboBoxItem Content="Google Drive" Tag="GoogleDrive" IsEnabled="False"/>
                     </ComboBox>
-                    <TextBlock Text="目前仅支持本地文件同步，云端同步功能即将推出。"
+                    <TextBlock Text="支持本地文件同步和服务器同步功能。"
                                FontSize="10"
                                Foreground="#999999"
                                Margin="0,5,0,0"
@@ -151,13 +152,158 @@
                     </Border>
                 </StackPanel>
 
+                <!-- Server 同步配置 -->
+                <StackPanel Margin="0,15,0,0"
+                           IsEnabled="{Binding IsSyncEnabled}"
+                           Visibility="{Binding IsServerSyncType, Converter={StaticResource BoolToVisibilityConverter}}">
+
+                    <!-- 分隔线 -->
+                    <Separator Margin="0,10,0,15" Background="#EEEEEE"/>
+
+                    <!-- 服务器配置 -->
+                    <TextBlock Text="🌐 服务器同步配置" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,10"/>
+
+                    <!-- 服务器地址 -->
+                    <TextBlock Text="服务器地址:" FontSize="12" Margin="0,0,0,5" Foreground="#666666"/>
+                    <TextBox Text="{Binding ServerSyncConfig.ServerUrl}"
+                             Height="25"
+                             Padding="5"
+                             Margin="0,0,0,10"
+                             ToolTip="例如: http://localhost:5000 或 https://api.example.com"/>
+
+                    <!-- 设备ID -->
+                    <TextBlock Text="设备ID:" FontSize="12" Margin="0,0,0,5" Foreground="#666666"/>
+                    <TextBox Text="{Binding ServerSyncConfig.DeviceId}"
+                             Height="25"
+                             Padding="5"
+                             Margin="0,0,0,10"
+                             IsReadOnly="True"
+                             ToolTip="设备唯一标识符，自动生成"/>
+
+                    <!-- 同步方向 -->
+                    <TextBlock Text="同步方向:" FontSize="12" Margin="0,0,0,5" Foreground="#666666"/>
+                    <ComboBox SelectedValue="{Binding ServerSyncConfig.SyncDirection}"
+                              SelectedValuePath="Tag"
+                              FontSize="12"
+                              Height="25"
+                              Padding="5"
+                              Margin="0,0,0,10">
+                        <ComboBoxItem Content="双向同步" Tag="Bidirectional"/>
+                        <ComboBoxItem Content="仅推送" Tag="PushOnly"/>
+                        <ComboBoxItem Content="仅拉取" Tag="PullOnly"/>
+                    </ComboBox>
+
+                    <!-- 同步间隔 -->
+                    <TextBlock Text="自动同步间隔:" FontSize="12" Margin="0,0,0,5" Foreground="#666666"/>
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Slider Grid.Column="0"
+                                Minimum="1"
+                                Maximum="60"
+                                Value="{Binding ServerSyncConfig.SyncIntervalMinutes}"
+                                TickFrequency="5"
+                                IsSnapToTickEnabled="True"
+                                Margin="0,0,10,0"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding ServerSyncConfig.SyncIntervalMinutes, StringFormat={}{0} 分钟}"
+                                   Width="60"
+                                   TextAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="12"/>
+                    </Grid>
+
+                    <!-- 连接超时 -->
+                    <TextBlock Text="连接超时 (秒):" FontSize="12" Margin="0,0,0,5" Foreground="#666666"/>
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Slider Grid.Column="0"
+                                Minimum="5"
+                                Maximum="120"
+                                Value="{Binding ServerSyncConfig.ConnectionTimeoutSeconds}"
+                                TickFrequency="5"
+                                IsSnapToTickEnabled="True"
+                                Margin="0,0,10,0"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding ServerSyncConfig.ConnectionTimeoutSeconds, StringFormat={}{0} 秒}"
+                                   Width="60"
+                                   TextAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="12"/>
+                    </Grid>
+
+                    <!-- 重试次数 -->
+                    <TextBlock Text="重试次数:" FontSize="12" Margin="0,0,0,5" Foreground="#666666"/>
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Slider Grid.Column="0"
+                                Minimum="0"
+                                Maximum="10"
+                                Value="{Binding ServerSyncConfig.MaxRetryAttempts}"
+                                TickFrequency="1"
+                                IsSnapToTickEnabled="True"
+                                Margin="0,0,10,0"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding ServerSyncConfig.MaxRetryAttempts}"
+                                   Width="60"
+                                   TextAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="12"/>
+                    </Grid>
+
+                    <!-- 同步选项 -->
+                    <CheckBox Content="剪贴板变化时自动同步"
+                              IsChecked="{Binding ServerSyncConfig.AutoSyncOnClipboardChange}"
+                              Margin="0,5,0,5"
+                              FontSize="12"/>
+
+                    <CheckBox Content="启用冲突检测和解决"
+                              IsChecked="{Binding ServerSyncConfig.EnableConflictResolution}"
+                              Margin="0,0,0,5"
+                              FontSize="12"/>
+
+                    <!-- 冲突解决策略 -->
+                    <StackPanel Margin="0,5,0,10"
+                                IsEnabled="{Binding ServerSyncConfig.EnableConflictResolution}">
+                        <TextBlock Text="冲突解决策略:" FontSize="12" Margin="0,0,0,5" Foreground="#666666"/>
+                        <ComboBox SelectedValue="{Binding ServerSyncConfig.ConflictStrategy}"
+                                  SelectedValuePath="Tag"
+                                  FontSize="12"
+                                  Height="25"
+                                  Padding="5">
+                            <ComboBoxItem Content="保留较新的版本" Tag="KeepNewer"/>
+                            <ComboBoxItem Content="保留两个版本" Tag="KeepBoth"/>
+                            <ComboBoxItem Content="保留本地版本" Tag="KeepLocal"/>
+                            <ComboBoxItem Content="保留远程版本" Tag="KeepRemote"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <!-- 同步状态 -->
+                    <Border BorderBrush="#E8F5E9" Background="#F1F8E9" Padding="10" CornerRadius="4" Margin="0,10,0,0">
+                        <StackPanel>
+                            <TextBlock Text="📊 当前状态" FontSize="11" FontWeight="SemiBold" Margin="0,0,0,5"/>
+                            <TextBlock Text="{Binding SyncStatusText}" FontSize="10" Margin="0,0,0,3"/>
+                            <TextBlock Text="{Binding LastSyncTimeText}" FontSize="10"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
                 <!-- 同步说明 -->
                 <Border BorderBrush="#E3F2FD" Background="#F8FBFF" Padding="10" CornerRadius="4" Margin="0,15,0,0">
                     <StackPanel>
                         <TextBlock Text="ℹ️ 关于同步功能" FontSize="11" FontWeight="SemiBold" Margin="0,0,0,5"/>
                         <TextBlock Text="• 本地文件同步：将剪贴板数据同步到指定文件夹" FontSize="10" Margin="0,0,0,3"/>
+                        <TextBlock Text="• 服务器同步：通过HTTP API与服务器双向同步数据" FontSize="10" Margin="0,0,0,3"/>
                         <TextBlock Text="• 数据自动加密存储，保护隐私安全" FontSize="10" Margin="0,0,0,3"/>
-                        <TextBlock Text="• 支持多设备间通过共享文件夹同步数据" FontSize="10"/>
+                        <TextBlock Text="• 支持多设备间通过共享文件夹或服务器同步数据" FontSize="10"/>
                     </StackPanel>
                 </Border>
             </StackPanel>

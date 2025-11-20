@@ -222,7 +222,7 @@ namespace PasteList.Services
                 return (false, "同步类型不能为空");
 
             // 检查同步类型是否支持
-            var supportedTypes = new[] { "LocalFile", "OneDrive", "GoogleDrive" };
+            var supportedTypes = new[] { "LocalFile", "OneDrive", "GoogleDrive", "Server" };
             if (!supportedTypes.Contains(configuration.SyncType))
                 return (false, $"不支持的同步类型: {configuration.SyncType}");
 
@@ -237,6 +237,28 @@ namespace PasteList.Services
                 // 云端同步需要配置数据
                 if (string.IsNullOrEmpty(configuration.ConfigData))
                     return (false, "云端同步需要配置数据");
+            }
+            else if (configuration.SyncType == "Server")
+            {
+                // 服务器同步需要配置数据
+                if (string.IsNullOrEmpty(configuration.ConfigData))
+                    return (false, "服务器同步需要配置数据");
+
+                // 验证服务器配置格式
+                try
+                {
+                    var serverConfig = System.Text.Json.JsonSerializer.Deserialize<ServerSyncConfig>(configuration.ConfigData);
+                    if (serverConfig == null)
+                        return (false, "服务器配置格式错误");
+
+                    var (isValid, errorMessage) = serverConfig.Validate();
+                    if (!isValid)
+                        return (false, $"服务器配置验证失败: {errorMessage}");
+                }
+                catch
+                {
+                    return (false, "服务器配置格式无效，请检查JSON格式");
+                }
             }
 
             return (true, null);

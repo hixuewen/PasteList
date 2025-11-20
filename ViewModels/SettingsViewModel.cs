@@ -29,6 +29,7 @@ namespace PasteList.ViewModels
         private string _syncType = "LocalFile";
         private SyncConfiguration? _syncConfiguration;
         private LocalFileSyncConfig _localFileSyncConfig = new();
+        private ServerSyncConfig _serverSyncConfig = new();
         private bool _hasChanges;
         private string _syncStatusText = "未配置";
         private string _lastSyncTimeText = "从未同步";
@@ -112,6 +113,7 @@ namespace PasteList.ViewModels
                     HasChanges = true;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(IsLocalFileSyncType));
+                    OnPropertyChanged(nameof(IsServerSyncType));
                     UpdateSyncStatusText();
                     ((RelayCommand)SaveCommand).RaiseCanExecuteChanged();
                 }
@@ -124,6 +126,11 @@ namespace PasteList.ViewModels
         public bool IsLocalFileSyncType => SyncType == "LocalFile";
 
         /// <summary>
+        /// 是否为 Server 同步类型
+        /// </summary>
+        public bool IsServerSyncType => SyncType == "Server";
+
+        /// <summary>
         /// 本地文件同步配置
         /// </summary>
         public LocalFileSyncConfig LocalFileSyncConfig
@@ -134,6 +141,24 @@ namespace PasteList.ViewModels
                 if (_localFileSyncConfig != value)
                 {
                     _localFileSyncConfig = value;
+                    HasChanges = true;
+                    OnPropertyChanged();
+                    UpdateSyncStatusText();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 服务器同步配置
+        /// </summary>
+        public ServerSyncConfig ServerSyncConfig
+        {
+            get => _serverSyncConfig;
+            set
+            {
+                if (_serverSyncConfig != value)
+                {
+                    _serverSyncConfig = value;
                     HasChanges = true;
                     OnPropertyChanged();
                     UpdateSyncStatusText();
@@ -236,6 +261,24 @@ namespace PasteList.ViewModels
                     {
                         _localFileSyncConfig = new();
                     }
+
+                    // 加载 Server 特定配置
+                    if (_syncConfiguration.SyncType == "Server" && !string.IsNullOrEmpty(_syncConfiguration.ConfigData))
+                    {
+                        try
+                        {
+                            _serverSyncConfig = JsonSerializer.Deserialize<ServerSyncConfig>(_syncConfiguration.ConfigData) ?? new();
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogError(ex, "解析 Server 同步配置失败");
+                            _serverSyncConfig = new();
+                        }
+                    }
+                    else
+                    {
+                        _serverSyncConfig = new();
+                    }
                 }
                 catch (InvalidOperationException ex)
                 {
@@ -255,7 +298,9 @@ namespace PasteList.ViewModels
                 OnPropertyChanged(nameof(IsSyncEnabled));
                 OnPropertyChanged(nameof(SyncType));
                 OnPropertyChanged(nameof(IsLocalFileSyncType));
+                OnPropertyChanged(nameof(IsServerSyncType));
                 OnPropertyChanged(nameof(LocalFileSyncConfig));
+                OnPropertyChanged(nameof(ServerSyncConfig));
 
                 _logger?.LogDebug($"设置窗口加载完成，开机启动状态: {(_isStartupEnabled ? "已启用" : "已禁用")}，同步状态: {(_isSyncEnabled ? "已启用" : "已禁用")}，同步类型: {_syncType}");
             }
@@ -308,6 +353,20 @@ namespace PasteList.ViewModels
                             }
 
                             _syncConfiguration.ConfigData = JsonSerializer.Serialize(_localFileSyncConfig, new JsonSerializerOptions
+                            {
+                                WriteIndented = true
+                            });
+                        }
+                        else if (SyncType == "Server")
+                        {
+                            // 验证 Server 配置
+                            var (isValid, errorMessage) = _serverSyncConfig.Validate();
+                            if (!isValid)
+                            {
+                                throw new InvalidOperationException($"Server 同步配置无效: {errorMessage}");
+                            }
+
+                            _syncConfiguration.ConfigData = JsonSerializer.Serialize(_serverSyncConfig, new JsonSerializerOptions
                             {
                                 WriteIndented = true
                             });
@@ -435,28 +494,49 @@ namespace PasteList.ViewModels
         /// </summary>
         private void UpdateSyncStatusText()
         {
-            if (!IsSyncEnabled || SyncType != "LocalFile")
+            if (!IsSyncEnabled)
             {
                 SyncStatusText = "未启用";
                 LastSyncTimeText = "从未同步";
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(LocalFileSyncConfig.SyncFolderPath))
+            if (SyncType == "LocalFile")
             {
-                SyncStatusText = "未配置文件夹";
+                if (string.IsNullOrWhiteSpace(LocalFileSyncConfig.SyncFolderPath))
+                {
+                    SyncStatusText = "未配置文件夹";
+                    LastSyncTimeText = "从未同步";
+                    return;
+                }
+
+                if (!Directory.Exists(LocalFileSyncConfig.SyncFolderPath))
+                {
+                    SyncStatusText = "文件夹不存在";
+                    LastSyncTimeText = "从未同步";
+                    return;
+                }
+
+                SyncStatusText = "配置正常";
+            }
+            else if (SyncType == "Server")
+            {
+                var (isValid, errorMessage) = ServerSyncConfig.Validate();
+                if (!isValid)
+                {
+                    SyncStatusText = $"配置无效: {errorMessage}";
+                    LastSyncTimeText = "从未同步";
+                    return;
+                }
+
+                SyncStatusText = "配置正常";
+            }
+            else
+            {
+                SyncStatusText = "未配置";
                 LastSyncTimeText = "从未同步";
                 return;
             }
-
-            if (!Directory.Exists(LocalFileSyncConfig.SyncFolderPath))
-            {
-                SyncStatusText = "文件夹不存在";
-                LastSyncTimeText = "从未同步";
-                return;
-            }
-
-            SyncStatusText = "配置正常";
 
             if (_syncConfiguration?.LastSyncTime.HasValue == true)
             {
