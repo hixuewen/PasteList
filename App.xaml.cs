@@ -10,7 +10,7 @@ namespace PasteList
     /// <summary>
     /// Interaction logic for App.xaml
     /// </summary>
-    public partial class App : Application
+    public partial class App : System.Windows.Application
     {
         // 用于确保只有一个实例运行的互斥体
         private static Mutex? _mutex;

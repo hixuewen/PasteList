@@ -33,45 +33,6 @@ namespace PasteList.Migrations
 
                     b.ToTable("clipboard_items");
                 });
-
-            modelBuilder.Entity("PasteList.Models.SyncConfiguration", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("id");
-
-                    b.Property<string>("ConfigData")
-                        .HasMaxLength(5000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("config_data");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("created_at");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("is_enabled");
-
-                    b.Property<DateTime?>("LastSyncTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("last_sync_time");
-
-                    b.Property<string>("SyncType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("sync_type");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("sync_configurations");
-                });
 #pragma warning restore 612, 618
         }
     }

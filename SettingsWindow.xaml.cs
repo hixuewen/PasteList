@@ -11,20 +11,18 @@ namespace PasteList
     public partial class SettingsWindow : Window
     {
         private readonly SettingsViewModel _viewModel;
-        private bool _saveClicked = false;
 
         /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="startupService">启动服务</param>
-        /// <param name="syncConfigurationService">同步配置服务</param>
         /// <param name="logger">日志服务</param>
-        public SettingsWindow(IStartupService startupService, ISyncConfigurationService syncConfigurationService, ILoggerService? logger)
+        public SettingsWindow(IStartupService startupService, ILoggerService? logger)
         {
             InitializeComponent();
 
             // 初始化ViewModel
-            _viewModel = new SettingsViewModel(startupService, syncConfigurationService, logger);
+            _viewModel = new SettingsViewModel(startupService, logger);
             DataContext = _viewModel;
 
             // 绑定窗口加载事件
@@ -57,8 +55,6 @@ namespace PasteList
         {
             try
             {
-                _saveClicked = true;
-
                 // 等待异步保存操作完成
                 if (_viewModel.SaveCommand is RelayCommand relayCommand)
                 {

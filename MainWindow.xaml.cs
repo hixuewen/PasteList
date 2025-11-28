@@ -107,9 +107,6 @@ namespace PasteList
         private IClipboardHistoryService? _historyService;
         private ClipboardDbContext? _dbContext;
         private IStartupService? _startupService;
-        private ISyncConfigurationService? _syncConfigurationService;
-        private ISyncService? _syncService;
-        private IAutoSyncService? _autoSyncService;
         private ILoggerService? _logger;
 
         /// <summary>
@@ -136,10 +133,12 @@ namespace PasteList
                 await InitializeAsync();
 
                 // 加载历史记录数据
-                await _viewModel.LoadHistoryAsync();
-
-                // 设置初始状态消息
-                _viewModel.StatusMessage = "应用程序已就绪，按 Alt+Z 可唤起窗口";
+                if (_viewModel != null)
+                {
+                    await _viewModel.LoadHistoryAsync();
+                    // 设置初始状态消息
+                    _viewModel.StatusMessage = "应用程序已就绪，按 Alt+Z 可唤起窗口";
+                }
             }
             catch (Exception ex)
             {
@@ -151,7 +150,7 @@ namespace PasteList
         /// <summary>
         /// 异步初始化应用程序
         /// </summary>
-        private async Task InitializeAsync()
+        private Task InitializeAsync()
         {
             try
             {
@@ -167,9 +166,6 @@ namespace PasteList
                 _dbContext.Database.EnsureCreated();
                 _logger.LogInfo("数据库创建或连接成功");
 
-                // 检查并创建 sync_configurations 表（如果不存在）
-                await EnsureSyncConfigurationsTableExistsAsync();
-
             // 初始化服务
             _clipboardService = new ClipboardService(this, _logger);
             _logger.LogInfo("剪贴板服务初始化完成");
@@ -180,17 +176,8 @@ namespace PasteList
             _startupService = new StartupService();
             _logger.LogInfo("启动服务初始化完成");
 
-            _syncConfigurationService = new SyncConfigurationService(_dbContext, _logger);
-            _logger.LogInfo("同步配置服务初始化完成");
-
-            _syncService = new SyncService(_historyService, _logger);
-            _logger.LogInfo("同步服务初始化完成");
-
-            _autoSyncService = new AutoSyncService(_syncService, _syncConfigurationService, _historyService, _logger);
-            _logger.LogInfo("自动同步服务初始化完成");
-
             // 初始化ViewModel
-            _viewModel = new MainWindowViewModel(_clipboardService, _historyService, _autoSyncService, _logger);
+            _viewModel = new MainWindowViewModel(_clipboardService, _historyService, _logger);
             _logger.LogInfo("ViewModel初始化完成");
 
             // 设置数据上下文
@@ -217,105 +204,15 @@ namespace PasteList
             // 注册全局热键
             RegisterGlobalHotKey();
 
-            // 启动自动同步服务
-            try
-            {
-                if (_autoSyncService != null)
-                {
-                    await _autoSyncService.StartAsync();
-                    _logger.LogInfo("自动同步服务已启动");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "启动自动同步服务失败");
-            }
-
             _logger.LogInfo("MainWindow 初始化完成");
+            return Task.CompletedTask;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "MainWindow 初始化过程中发生错误");
+            _logger?.LogError(ex, "MainWindow 初始化过程中发生错误");
             MessageBox.Show($"应用程序初始化失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             Close();
-        }
-    }
-
-    /// <summary>
-    /// 确保 sync_configurations 表存在
-    /// </summary>
-    private async Task EnsureSyncConfigurationsTableExistsAsync()
-    {
-        try
-        {
-            // 检查表是否存在
-            var connection = _dbContext.Database.GetDbConnection();
-            await connection.OpenAsync();
-
-            using var command = connection.CreateCommand();
-            command.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='sync_configurations'";
-
-            var result = await command.ExecuteScalarAsync();
-            if (result == null)
-            {
-                _logger.LogInfo("sync_configurations 表不存在，正在创建...");
-
-                // 手动创建表
-                command.CommandText = @"
-                    CREATE TABLE sync_configurations (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        sync_type TEXT NOT NULL,
-                        is_enabled INTEGER NOT NULL,
-                        config_data TEXT,
-                        last_sync_time TEXT,
-                        created_at TEXT NOT NULL,
-                        updated_at TEXT NOT NULL
-                    )";
-
-                await command.ExecuteNonQueryAsync();
-                _logger.LogInfo("sync_configurations 表创建成功");
-
-                // 创建默认配置
-                await CreateDefaultSyncConfigurationAsync();
-            }
-            else
-            {
-                _logger.LogInfo("sync_configurations 表已存在");
-            }
-
-            await connection.CloseAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "检查或创建 sync_configurations 表时发生错误");
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// 创建默认同步配置
-    /// </summary>
-    private async Task CreateDefaultSyncConfigurationAsync()
-    {
-        try
-        {
-            var defaultConfig = new SyncConfiguration
-            {
-                SyncType = "LocalFile",
-                IsEnabled = false,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-
-            await _dbContext.SyncConfigurations.AddAsync(defaultConfig);
-            await _dbContext.SaveChangesAsync();
-
-            _logger.LogInfo("默认同步配置创建成功");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "创建默认同步配置时发生错误");
-            throw;
+            return Task.CompletedTask;
         }
     }
         
@@ -337,44 +234,36 @@ namespace PasteList
                 e.Cancel = true;
                 WindowState = WindowState.Minimized;
                 Hide();
-                _logger.LogUserAction("窗口最小化到托盘");
+                _logger?.LogUserAction("窗口最小化到托盘");
                 return;
             }
 
             try
             {
-                _logger.LogInfo("开始清理应用程序资源");
+                _logger?.LogInfo("开始清理应用程序资源");
 
                 // 注销全局快捷键
                 UnregisterGlobalHotKey();
-                _logger.LogDebug("全局快捷键已注销");
+                _logger?.LogDebug("全局快捷键已注销");
 
                 // 停止剪贴板监听
                 if (_clipboardService != null)
                 {
                     _clipboardService.StopListening();
-                    _logger.LogDebug("剪贴板监听已停止");
-                }
-
-                // 停止自动同步服务
-                if (_autoSyncService != null)
-                {
-                    _autoSyncService.Stop();
-                    _autoSyncService.Dispose();
-                    _logger.LogDebug("自动同步服务已停止");
+                    _logger?.LogDebug("剪贴板监听已停止");
                 }
 
                 // 释放ViewModel资源
                 _viewModel?.Dispose();
-                _logger.LogDebug("ViewModel资源已释放");
+                _logger?.LogDebug("ViewModel资源已释放");
 
                 // 释放历史服务资源
                 _historyService?.Dispose();
-                _logger.LogDebug("历史记录服务资源已释放");
+                _logger?.LogDebug("历史记录服务资源已释放");
 
                 // 释放数据库上下文资源
                 _dbContext?.Dispose();
-                _logger.LogDebug("数据库上下文资源已释放");
+                _logger?.LogDebug("数据库上下文资源已释放");
 
                 // 释放日志服务
                 _logger?.LogApplicationShutdown();
@@ -461,7 +350,7 @@ namespace PasteList
         private void ListView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             // 确保有选中项且命令可执行
-            if (_viewModel.SelectedItem != null && _viewModel.DoubleClickItemCommand.CanExecute(null))
+            if (_viewModel?.SelectedItem != null && _viewModel.DoubleClickItemCommand.CanExecute(null))
             {
                 _viewModel.DoubleClickItemCommand.Execute(null);
             }
@@ -672,8 +561,14 @@ namespace PasteList
             {
                 _logger?.LogUserAction("点击托盘菜单 - 设置");
 
+                if (_startupService == null)
+                {
+                    MessageBox.Show("启动服务未初始化，无法打开设置", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
                 // 创建设置窗口
-                var settingsWindow = new SettingsWindow(_startupService, _syncConfigurationService, _logger);
+                var settingsWindow = new SettingsWindow(_startupService, _logger);
                 settingsWindow.Owner = this;
 
                 // 显示设置窗口（模态对话框）
@@ -684,43 +579,6 @@ namespace PasteList
                 _logger?.LogError(ex, "打开设置窗口时发生错误");
                 System.Diagnostics.Debug.WriteLine($"打开设置窗口时发生错误: {ex.Message}");
                 MessageBox.Show($"打开设置窗口失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        /// <summary>
-        /// 处理"同步状态"菜单项点击事件
-        /// </summary>
-        /// <param name="sender">事件发送者</param>
-        /// <param name="e">事件参数</param>
-        private void SyncStatusMenuItem_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                _logger?.LogUserAction("点击托盘菜单 - 同步状态");
-
-                // 检查服务是否可用
-                if (_syncService == null || _autoSyncService == null || _syncConfigurationService == null)
-                {
-                    MessageBox.Show("同步服务未初始化", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                // 创建同步状态窗口
-                var syncStatusWindow = new PasteList.Views.SyncStatusWindow(
-                    _syncService,
-                    _syncConfigurationService,
-                    _autoSyncService,
-                    _logger);
-                syncStatusWindow.Owner = this;
-
-                // 显示同步状态窗口
-                syncStatusWindow.Show();
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "打开同步状态窗口时发生错误");
-                System.Diagnostics.Debug.WriteLine($"打开同步状态窗口时发生错误: {ex.Message}");
-                MessageBox.Show($"打开同步状态窗口失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
