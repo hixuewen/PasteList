@@ -31,6 +31,13 @@ export const ClipboardItem = {
       sortOrder = 'desc'
     } = options;
 
+    // 验证 sortBy 字段，防止 SQL 注入
+    const allowedSortFields = ['id', 'content', 'created_at', 'updated_at'];
+    const validSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'created_at';
+
+    // 验证 sortOrder，防止 SQL 注入
+    const validSortOrder = sortOrder.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
     const offset = (page - 1) * pageSize;
     const conditions = ['user_id = ?'];
     const params = [userId];
@@ -56,7 +63,7 @@ export const ClipboardItem = {
     }
 
     const whereClause = conditions.join(' AND ');
-    const orderClause = `${sortBy} ${sortOrder.toUpperCase()}`;
+    const orderClause = `${validSortBy} ${validSortOrder}`;
 
     const items = await query(
       `SELECT * FROM clipboard_items WHERE ${whereClause} ORDER BY ${orderClause} LIMIT ? OFFSET ?`,
