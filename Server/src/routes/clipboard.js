@@ -56,16 +56,6 @@ router.delete('/items/:id',
   clipboardController.deleteItem
 );
 
-// 批量删除剪贴板项
-router.delete('/items/batch',
-  authenticate,
-  [
-    body('ids').isArray().withMessage('ids必须是数组')
-  ],
-  validate,
-  clipboardController.deleteBatch
-);
-
 // 同步剪贴板数据
 router.post('/sync',
   authenticate,

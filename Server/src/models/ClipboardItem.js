@@ -105,15 +105,6 @@ export const ClipboardItem = {
     );
   },
 
-  async deleteBatch(ids, userId) {
-    const placeholders = ids.map(() => '?').join(',');
-    const result = await query(
-      `DELETE FROM clipboard_items WHERE id IN (${placeholders}) AND user_id = ?`,
-      [...ids, userId]
-    );
-    return result.affectedRows;
-  },
-
   toPublic(item) {
     if (!item) return null;
     return {

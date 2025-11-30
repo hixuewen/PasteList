@@ -807,39 +807,7 @@ GET /clipboard/items?page=1&pageSize=20&deviceId=WIN-DESKTOP-001&sortOrder=desc
 
 ---
 
-### 4.7 批量删除剪贴板项
-
-**接口**: `DELETE /clipboard/items/batch`
-
-**描述**: 批量删除多个剪贴板项
-
-**是否需要认证**: 是
-
-**请求体**:
-
-```json
-{
-  "ids": [5001, 5002, 5003]  // 要删除的ID数组
-}
-```
-
-**成功响应** (200):
-
-```json
-{
-  "success": true,
-  "data": {
-    "deleted": 3,
-    "failed": 0
-  },
-  "message": "批量删除成功",
-  "timestamp": "2025-11-29T19:20:00Z"
-}
-```
-
----
-
-### 4.8 同步剪贴板数据
+### 4.7 同步剪贴板数据
 
 **接口**: `POST /clipboard/sync`
 

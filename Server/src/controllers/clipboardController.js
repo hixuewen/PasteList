@@ -146,26 +146,6 @@ export const deleteItem = async (req, res, next) => {
   }
 };
 
-export const deleteBatch = async (req, res, next) => {
-  try {
-    const { ids } = req.body;
-    const userId = req.userId;
-
-    if (!Array.isArray(ids) || ids.length === 0) {
-      throw new ApiError(400, errorCodes.VALIDATION_ERROR, '必须提供至少一个ID');
-    }
-
-    const deleted = await ClipboardItem.deleteBatch(ids, userId);
-
-    successResponse(res, {
-      deleted,
-      failed: ids.length - deleted
-    }, '批量删除成功');
-  } catch (error) {
-    next(error);
-  }
-};
-
 export const syncItems = async (req, res, next) => {
   try {
     const { deviceId, lastSyncTime, localItems = [] } = req.body;
