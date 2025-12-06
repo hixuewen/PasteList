@@ -107,6 +107,7 @@ namespace PasteList
         private IClipboardHistoryService? _historyService;
         private ClipboardDbContext? _dbContext;
         private IStartupService? _startupService;
+        private IAuthService? _authService;
         private ILoggerService? _logger;
 
         /// <summary>
@@ -175,6 +176,10 @@ namespace PasteList
 
             _startupService = new StartupService();
             _logger.LogInfo("启动服务初始化完成");
+
+            // 初始化认证服务
+            _authService = new AuthService(_logger);
+            _logger.LogInfo("认证服务初始化完成");
 
             // 初始化ViewModel
             _viewModel = new MainWindowViewModel(_clipboardService, _historyService, _logger);
@@ -567,8 +572,14 @@ namespace PasteList
                     return;
                 }
 
+                if (_authService == null)
+                {
+                    MessageBox.Show("认证服务未初始化，无法打开设置", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
                 // 创建设置窗口
-                var settingsWindow = new SettingsWindow(_startupService, _logger);
+                var settingsWindow = new SettingsWindow(_startupService, _authService, _logger);
                 settingsWindow.Owner = this;
 
                 // 显示设置窗口（模态对话框）

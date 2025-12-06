@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using System.Windows.Controls;
 using PasteList.Services;
 using PasteList.ViewModels;
 
@@ -16,13 +17,14 @@ namespace PasteList
         /// 构造函数
         /// </summary>
         /// <param name="startupService">启动服务</param>
+        /// <param name="authService">认证服务</param>
         /// <param name="logger">日志服务</param>
-        public SettingsWindow(IStartupService startupService, ILoggerService? logger)
+        public SettingsWindow(IStartupService startupService, IAuthService authService, ILoggerService? logger)
         {
             InitializeComponent();
 
             // 初始化ViewModel
-            _viewModel = new SettingsViewModel(startupService, logger);
+            _viewModel = new SettingsViewModel(startupService, authService, logger);
             DataContext = _viewModel;
 
             // 绑定窗口加载事件
@@ -88,6 +90,28 @@ namespace PasteList
             catch (Exception ex)
             {
                 MessageBox.Show($"取消设置失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
+        /// 处理密码框密码变化事件
+        /// </summary>
+        private void PasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            if (sender is PasswordBox passwordBox)
+            {
+                _viewModel.Password = passwordBox.Password;
+            }
+        }
+
+        /// <summary>
+        /// 处理确认密码框密码变化事件
+        /// </summary>
+        private void ConfirmPasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            if (sender is PasswordBox passwordBox)
+            {
+                _viewModel.ConfirmPassword = passwordBox.Password;
             }
         }
     }
