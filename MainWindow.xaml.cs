@@ -131,7 +131,7 @@ namespace PasteList
         {
             try
             {
-                Initialize();
+                await InitializeAsync();
 
                 // 加载历史记录数据
                 if (_viewModel != null)
@@ -149,9 +149,9 @@ namespace PasteList
         }
 
         /// <summary>
-        /// 初始化应用程序
+        /// 异步初始化应用程序
         /// </summary>
-        private void Initialize()
+        private async Task InitializeAsync()
         {
             try
             {
@@ -180,6 +180,25 @@ namespace PasteList
             // 初始化认证服务
             _authService = new AuthService(_logger);
             _logger.LogInfo("认证服务初始化完成");
+
+            // 尝试自动登录（使用保存的凭证）
+            try
+            {
+                var autoLoginSuccess = await _authService.TryAutoLoginAsync();
+                if (autoLoginSuccess)
+                {
+                    _logger.LogInfo("自动登录成功");
+                }
+                else
+                {
+                    _logger.LogDebug("自动登录失败或没有保存的凭证");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "自动登录初始化失败");
+                // 不阻断应用启动，继续运行
+            }
 
             // 初始化ViewModel
             _viewModel = new MainWindowViewModel(_clipboardService, _historyService, _logger);

@@ -126,6 +126,12 @@ namespace PasteList.Services
         Task<bool> ValidateTokenAsync();
 
         /// <summary>
+        /// 尝试自动登录（使用保存的凭证）
+        /// </summary>
+        /// <returns>是否成功</returns>
+        Task<bool> TryAutoLoginAsync();
+
+        /// <summary>
         /// 获取访问令牌（用于API调用）
         /// </summary>
         /// <returns>访问令牌，如果未登录则返回null</returns>
