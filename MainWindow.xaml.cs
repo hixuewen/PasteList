@@ -131,7 +131,7 @@ namespace PasteList
         {
             try
             {
-                await InitializeAsync();
+                Initialize();
 
                 // 加载历史记录数据
                 if (_viewModel != null)
@@ -149,9 +149,9 @@ namespace PasteList
         }
 
         /// <summary>
-        /// 异步初始化应用程序
+        /// 初始化应用程序
         /// </summary>
-        private async Task InitializeAsync()
+        private void Initialize()
         {
             try
             {
