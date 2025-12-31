@@ -151,7 +151,7 @@ namespace PasteList
         /// <summary>
         /// 异步初始化应用程序
         /// </summary>
-        private Task InitializeAsync()
+        private async Task InitializeAsync()
         {
             try
             {
@@ -210,14 +210,12 @@ namespace PasteList
             RegisterGlobalHotKey();
 
             _logger.LogInfo("MainWindow 初始化完成");
-            return Task.CompletedTask;
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "MainWindow 初始化过程中发生错误");
             MessageBox.Show($"应用程序初始化失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             Close();
-            return Task.CompletedTask;
         }
     }
         

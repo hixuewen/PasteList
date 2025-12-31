@@ -290,14 +290,6 @@
                                                  IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
                                 </Grid>
                                 
-                                <!-- 记住我（仅登录时显示） -->
-                                <CheckBox Content="记住我"
-                                          IsChecked="{Binding RememberMe}"
-                                          Margin="80,0,0,10"
-                                          FontSize="12"
-                                          Visibility="{Binding IsLoginMode, Converter={StaticResource BoolToVisibility}}"
-                                          IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
-                                
                                 <!-- 按钮区域 -->
                                 <StackPanel Orientation="Horizontal" Margin="80,5,0,0">
                                     <!-- 登录按钮（登录模式） -->

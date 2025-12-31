@@ -24,7 +24,6 @@ namespace PasteList.ViewModels
         private string _email = string.Empty;
         private string _password = string.Empty;
         private string _confirmPassword = string.Empty;
-        private bool _rememberMe = true;
         private bool _isRegisterMode = false;
         private bool _isLoading = false;
         private string _authStatusMessage = string.Empty;
@@ -191,22 +190,6 @@ namespace PasteList.ViewModels
                     _confirmPassword = value;
                     OnPropertyChanged();
                     RaiseAuthCommandsCanExecuteChanged();
-                }
-            }
-        }
-
-        /// <summary>
-        /// 是否记住登录状态
-        /// </summary>
-        public bool RememberMe
-        {
-            get => _rememberMe;
-            set
-            {
-                if (_rememberMe != value)
-                {
-                    _rememberMe = value;
-                    OnPropertyChanged();
                 }
             }
         }
@@ -447,7 +430,7 @@ namespace PasteList.ViewModels
                 IsLoading = true;
                 AuthStatusMessage = "正在登录...";
 
-                var result = await _authService.LoginAsync(Username, Password, RememberMe);
+                var result = await _authService.LoginAsync(Username, Password);
 
                 if (result.Success)
                 {

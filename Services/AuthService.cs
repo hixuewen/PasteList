@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace PasteList.Services
@@ -16,7 +17,8 @@ namespace PasteList.Services
         private readonly HttpClient _httpClient;
         private readonly ILoggerService? _logger;
         private readonly string _configFilePath;
-        
+        private readonly SemaphoreSlim _authLock = new SemaphoreSlim(1, 1);
+
         private string? _accessToken;
         private string? _refreshToken;
         private UserInfo? _currentUser;
@@ -106,8 +108,9 @@ namespace PasteList.Services
         /// <summary>
         /// 用户登录
         /// </summary>
-        public async Task<AuthResult> LoginAsync(string usernameOrEmail, string password, bool rememberMe = false)
+        public async Task<AuthResult> LoginAsync(string usernameOrEmail, string password)
         {
+            await _authLock.WaitAsync();
             try
             {
                 _logger?.LogUserAction("尝试登录", $"用户: {usernameOrEmail}");
@@ -117,14 +120,14 @@ namespace PasteList.Services
                     username = usernameOrEmail,
                     password,
                     deviceId = GetDeviceId(),
-                    rememberMe
+                    rememberMe = false
                 };
 
                 var response = await PostAsync("/auth/login", requestBody);
-                
+
                 if (response.Success)
                 {
-                    await SaveCredentialsAsync(response, rememberMe);
+                    await SaveCredentialsAsync(response);
                     OnLoginStateChanged(true);
                     _logger?.LogInfo($"登录成功，用户: {usernameOrEmail}");
                 }
@@ -144,6 +147,10 @@ namespace PasteList.Services
                     ErrorMessage = $"登录失败: {ex.Message}"
                 };
             }
+            finally
+            {
+                _authLock.Release();
+            }
         }
 
         /// <summary>
@@ -151,6 +158,7 @@ namespace PasteList.Services
         /// </summary>
         public async Task<bool> LogoutAsync()
         {
+            await _authLock.WaitAsync();
             try
             {
                 _logger?.LogUserAction("尝试注销", $"用户: {_currentUser?.Username}");
@@ -181,6 +189,10 @@ namespace PasteList.Services
                 OnLoginStateChanged(false);
                 return false;
             }
+            finally
+            {
+                _authLock.Release();
+            }
         }
 
         /// <summary>
@@ -210,7 +222,7 @@ namespace PasteList.Services
                     _refreshToken = response.RefreshToken;
                     _tokenExpiresAt = DateTime.Now.AddSeconds(response.ExpiresIn);
                     
-                    await SaveTokensToFileAsync();
+                    // 不再保存令牌到文件
                     _logger?.LogDebug("令牌刷新成功");
                 }
                 else
@@ -255,68 +267,43 @@ namespace PasteList.Services
             }
         }
 
-        /// <summary>
-        /// 尝试自动登录
-        /// </summary>
-        public async Task<bool> TryAutoLoginAsync()
-        {
-            try
-            {
-                _logger?.LogDebug("尝试自动登录");
-
-                if (!File.Exists(_configFilePath))
-                {
-                    _logger?.LogDebug("没有保存的凭证");
-                    return false;
-                }
-
-                var json = await File.ReadAllTextAsync(_configFilePath);
-                var savedAuth = JsonSerializer.Deserialize<SavedAuthData>(json);
-
-                if (savedAuth == null || string.IsNullOrEmpty(savedAuth.RefreshToken))
-                {
-                    _logger?.LogDebug("保存的凭证无效");
-                    return false;
-                }
-
-                _refreshToken = savedAuth.RefreshToken;
-                _currentUser = savedAuth.User;
-
-                // 尝试刷新令牌
-                var result = await RefreshTokenAsync();
-                
-                if (result.Success)
-                {
-                    OnLoginStateChanged(true);
-                    _logger?.LogInfo($"自动登录成功，用户: {_currentUser?.Username}");
-                    return true;
-                }
-                else
-                {
-                    ClearCredentials();
-                    _logger?.LogWarning("自动登录失败，令牌已过期");
-                    return false;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "自动登录过程中发生错误");
-                ClearCredentials();
-                return false;
-            }
-        }
 
         /// <summary>
-        /// 获取访问令牌
+        /// 获取访问令牌（异步版本）
         /// </summary>
-        public string? GetAccessToken()
+        public async Task<string?> GetAccessTokenAsync()
         {
             // 检查令牌是否即将过期，如果是则尝试刷新
             if (_tokenExpiresAt != default && DateTime.Now.AddMinutes(5) >= _tokenExpiresAt)
             {
-                _ = RefreshTokenAsync();
+                try
+                {
+                    var result = await RefreshTokenAsync();
+                    if (!result.Success)
+                    {
+                        _logger?.LogWarning("令牌刷新失败，清除凭证");
+                        ClearCredentials();
+                        return null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "令牌刷新时发生异常");
+                    ClearCredentials();
+                    return null;
+                }
             }
             return _accessToken;
+        }
+
+        /// <summary>
+        /// 获取访问令牌（同步版本，向后兼容）
+        /// </summary>
+        public string? GetAccessToken()
+        {
+            // 在后台线程执行异步操作，避免阻塞UI线程
+            var task = Task.Run(async () => await GetAccessTokenAsync());
+            return task.Result;
         }
 
         /// <summary>
@@ -376,43 +363,19 @@ namespace PasteList.Services
         }
 
         /// <summary>
-        /// 保存凭证
+        /// 保存凭证（仅保存在内存中，不保存到文件）
         /// </summary>
-        private async Task SaveCredentialsAsync(AuthResult result, bool rememberMe = true)
+        private async Task SaveCredentialsAsync(AuthResult result)
         {
             _accessToken = result.AccessToken;
             _refreshToken = result.RefreshToken;
             _currentUser = result.User;
             _tokenExpiresAt = DateTime.Now.AddSeconds(result.ExpiresIn);
-
-            if (rememberMe)
-            {
-                await SaveTokensToFileAsync();
-            }
+            
+            // 不再保存凭证到文件
+            await Task.CompletedTask;
         }
 
-        /// <summary>
-        /// 保存令牌到文件
-        /// </summary>
-        private async Task SaveTokensToFileAsync()
-        {
-            try
-            {
-                var savedAuth = new SavedAuthData
-                {
-                    RefreshToken = _refreshToken,
-                    User = _currentUser
-                };
-
-                var json = JsonSerializer.Serialize(savedAuth);
-                await File.WriteAllTextAsync(_configFilePath, json);
-                _logger?.LogDebug("凭证已保存到文件");
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "保存凭证到文件时发生错误");
-            }
-        }
 
         /// <summary>
         /// 清除凭证
@@ -487,12 +450,6 @@ namespace PasteList.Services
         {
             public string? Code { get; set; }
             public string? Message { get; set; }
-        }
-
-        private class SavedAuthData
-        {
-            public string? RefreshToken { get; set; }
-            public UserInfo? User { get; set; }
         }
 
         #endregion

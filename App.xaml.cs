@@ -23,7 +23,7 @@ namespace PasteList
         {
             // 确保只有一个实例运行
             _mutex = new Mutex(true, AppMutexName, out bool isNewInstance);
-            
+
             if (!isNewInstance)
             {
                 // 如果已有实例运行，显示提示并退出
@@ -31,11 +31,11 @@ namespace PasteList
                 Shutdown();
                 return;
             }
-            
+
             // 添加全局异常处理
             this.DispatcherUnhandledException += App_DispatcherUnhandledException;
             AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
-            
+
             base.OnStartup(e);
         }
         

@@ -104,9 +104,8 @@ namespace PasteList.Services
         /// </summary>
         /// <param name="usernameOrEmail">用户名或邮箱</param>
         /// <param name="password">密码</param>
-        /// <param name="rememberMe">是否记住登录状态</param>
         /// <returns>认证结果</returns>
-        Task<AuthResult> LoginAsync(string usernameOrEmail, string password, bool rememberMe = false);
+        Task<AuthResult> LoginAsync(string usernameOrEmail, string password);
 
         /// <summary>
         /// 用户注销
@@ -125,12 +124,6 @@ namespace PasteList.Services
         /// </summary>
         /// <returns>是否有效</returns>
         Task<bool> ValidateTokenAsync();
-
-        /// <summary>
-        /// 尝试自动登录（使用保存的令牌）
-        /// </summary>
-        /// <returns>是否成功</returns>
-        Task<bool> TryAutoLoginAsync();
 
         /// <summary>
         /// 获取访问令牌（用于API调用）
