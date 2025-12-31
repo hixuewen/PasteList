@@ -437,6 +437,7 @@ namespace PasteList.ViewModels
                     AuthStatusMessage = "登录成功！";
                     UpdateLoginState();
                     ClearAuthInputs();
+                    OnPasswordBoxClearRequested();
                     _logger?.LogUserAction("用户登录成功", $"用户: {Username}");
                 }
                 else
@@ -480,6 +481,7 @@ namespace PasteList.ViewModels
                     AuthStatusMessage = "注册成功！";
                     UpdateLoginState();
                     ClearAuthInputs();
+                    OnPasswordBoxClearRequested();
                     _logger?.LogUserAction("用户注册成功", $"用户: {Username}");
                 }
                 else
@@ -513,6 +515,8 @@ namespace PasteList.ViewModels
                 await _authService.LogoutAsync();
 
                 UpdateLoginState();
+                ClearAuthInputs();
+                OnPasswordBoxClearRequested();
                 AuthStatusMessage = "已注销";
                 _logger?.LogUserAction("用户注销", $"用户: {username}");
             }
@@ -585,6 +589,19 @@ namespace PasteList.ViewModels
         }
 
         #endregion
+
+        /// <summary>
+        /// 请求清空密码框事件
+        /// </summary>
+        public event EventHandler? PasswordBoxClearRequested;
+
+        /// <summary>
+        /// 触发清空密码框事件
+        /// </summary>
+        private void OnPasswordBoxClearRequested()
+        {
+            PasswordBoxClearRequested?.Invoke(this, EventArgs.Empty);
+        }
 
         /// <summary>
         /// 属性变化事件

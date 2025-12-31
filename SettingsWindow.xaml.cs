@@ -27,6 +27,9 @@ namespace PasteList
             _viewModel = new SettingsViewModel(startupService, authService, logger);
             DataContext = _viewModel;
 
+            // 订阅清空密码框事件
+            _viewModel.PasswordBoxClearRequested += OnPasswordBoxClearRequested;
+
             // 绑定窗口加载事件
             this.Loaded += Window_Loaded;
         }
@@ -113,6 +116,15 @@ namespace PasteList
             {
                 _viewModel.ConfirmPassword = passwordBox.Password;
             }
+        }
+
+        /// <summary>
+        /// 处理清空密码框事件
+        /// </summary>
+        private void OnPasswordBoxClearRequested(object? sender, EventArgs e)
+        {
+            PasswordBox.Clear();
+            ConfirmPasswordBox.Clear();
         }
     }
 }

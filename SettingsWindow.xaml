@@ -270,7 +270,8 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="密码" FontSize="13" VerticalAlignment="Center" Grid.Column="0"/>
-                                    <PasswordBox Style="{StaticResource AuthPasswordBoxStyle}"
+                                    <PasswordBox x:Name="PasswordBox"
+                                                 Style="{StaticResource AuthPasswordBoxStyle}"
                                                  Grid.Column="1"
                                                  PasswordChanged="PasswordBox_PasswordChanged"
                                                  IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
@@ -284,7 +285,8 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="确认密码" FontSize="13" VerticalAlignment="Center" Grid.Column="0"/>
-                                    <PasswordBox Style="{StaticResource AuthPasswordBoxStyle}"
+                                    <PasswordBox x:Name="ConfirmPasswordBox"
+                                                 Style="{StaticResource AuthPasswordBoxStyle}"
                                                  Grid.Column="1"
                                                  PasswordChanged="ConfirmPasswordBox_PasswordChanged"
                                                  IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
