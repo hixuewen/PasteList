@@ -25,6 +25,13 @@ namespace PasteList.Services
         private UserInfo? _currentUser;
         private DateTime _tokenExpiresAt;
 
+        // 统一的 JSON 序列化选项
+        private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            WriteIndented = true
+        };
+
         /// <summary>
         /// API服务器基础地址
         /// </summary>
@@ -55,12 +62,11 @@ namespace PasteList.Services
             _httpClient = new HttpClient();
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             
-            // 配置文件路径
-            var appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PasteList");
-            Directory.CreateDirectory(appDataPath);
-            _configFilePath = Path.Combine(appDataPath, "auth.json");
+            // 配置文件路径 - 保存到软件所在目录
+            var appDir = AppDomain.CurrentDomain.BaseDirectory;
+            _configFilePath = Path.Combine(appDir, "auth.json");
             
-            _logger?.LogDebug("AuthService初始化完成");
+            _logger?.LogDebug($"AuthService初始化完成, 凭证路径: {_configFilePath}");
         }
 
         /// <summary>
@@ -87,6 +93,12 @@ namespace PasteList.Services
                     await SaveCredentialsAsync(response);
                     OnLoginStateChanged(true);
                     _logger?.LogInfo($"注册成功，用户: {username}");
+                    
+                    // 验证保存是否成功
+                    if (!File.Exists(_configFilePath))
+                    {
+                        _logger?.LogWarning($"注册成功但凭证文件未创建: {_configFilePath}");
+                    }
                 }
                 else
                 {
@@ -131,6 +143,12 @@ namespace PasteList.Services
                     await SaveCredentialsAsync(response);
                     OnLoginStateChanged(true);
                     _logger?.LogInfo($"登录成功，用户: {usernameOrEmail}");
+                    
+                    // 验证保存是否成功
+                    if (!File.Exists(_configFilePath))
+                    {
+                        _logger?.LogWarning($"登录成功但凭证文件未创建: {_configFilePath}");
+                    }
                 }
                 else
                 {
@@ -224,7 +242,7 @@ namespace PasteList.Services
                     _tokenExpiresAt = DateTime.Now.AddSeconds(response.ExpiresIn);
                     
                     await SaveTokensToFileAsync();
-                    _logger?.LogDebug("令牌刷新成功");
+                    _logger?.LogDebug("令牌刷新成功并已保存到文件");
                 }
                 else
                 {
@@ -279,21 +297,24 @@ namespace PasteList.Services
 
                 if (!File.Exists(_configFilePath))
                 {
-                    _logger?.LogDebug("没有保存的凭证");
+                    _logger?.LogDebug($"没有保存的凭证: {_configFilePath}");
                     return false;
                 }
 
                 var json = await File.ReadAllTextAsync(_configFilePath);
-                var savedAuth = JsonSerializer.Deserialize<SavedAuthData>(json);
+                _logger?.LogDebug($"读取凭证文件长度: {json.Length}");
+                
+                var savedAuth = JsonSerializer.Deserialize<SavedAuthData>(json, _jsonOptions);
 
                 if (savedAuth == null || string.IsNullOrEmpty(savedAuth.RefreshToken))
                 {
-                    _logger?.LogDebug("保存的凭证无效");
+                    _logger?.LogDebug("保存的凭证无效: 反序列化结果为空或令牌为空");
                     return false;
                 }
 
                 _refreshToken = savedAuth.RefreshToken;
                 _currentUser = savedAuth.User;
+                _logger?.LogDebug($"读取到凭证，用户: {_currentUser?.Username}, 准备刷新令牌");
 
                 // 尝试刷新令牌
                 var result = await RefreshTokenAsync();
@@ -329,6 +350,13 @@ namespace PasteList.Services
                 _refreshToken = null;
                 _currentUser = null;
                 _logger?.LogWarning($"自动登录网络错误，保留凭证: {ex.Message}");
+                return false;
+            }
+            catch (JsonException ex)
+            {
+                _logger?.LogError(ex, $"凭证文件JSON格式错误: {_configFilePath}");
+                // JSON 格式错误说明文件损坏，可以删除
+                ClearCredentials();
                 return false;
             }
             catch (Exception ex)
@@ -367,6 +395,7 @@ namespace PasteList.Services
             // 检查令牌是否即将过期，如果是则尝试刷新
             if (_tokenExpiresAt != default && DateTime.Now.AddMinutes(5) >= _tokenExpiresAt)
             {
+                _logger?.LogDebug($"令牌即将过期 (过期时间: {_tokenExpiresAt}), 尝试刷新");
                 try
                 {
                     var result = await RefreshTokenAsync();
@@ -412,20 +441,22 @@ namespace PasteList.Services
 
             if (response.IsSuccessStatusCode)
             {
-                var apiResponse = JsonSerializer.Deserialize<ApiResponse>(responseBody, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+                var apiResponse = JsonSerializer.Deserialize<ApiResponse>(responseBody, _jsonOptions);
 
                 if (apiResponse?.Data != null)
                 {
+                    // 优先使用扁平结构的令牌（刷新接口），如果没有则使用嵌套结构（登录接口）
+                    var accessToken = apiResponse.Data.AccessToken ?? apiResponse.Data.Token?.AccessToken;
+                    var refreshToken = apiResponse.Data.RefreshToken ?? apiResponse.Data.Token?.RefreshToken;
+                    var expiresIn = apiResponse.Data.ExpiresIn ?? apiResponse.Data.Token?.ExpiresIn ?? 3600;
+                    
                     return new AuthResult
                     {
                         Success = true,
                         User = apiResponse.Data.User,
-                        AccessToken = apiResponse.Data.Token?.AccessToken,
-                        RefreshToken = apiResponse.Data.Token?.RefreshToken,
-                        ExpiresIn = apiResponse.Data.Token?.ExpiresIn ?? 3600
+                        AccessToken = accessToken,
+                        RefreshToken = refreshToken,
+                        ExpiresIn = expiresIn
                     };
                 }
             }
@@ -433,10 +464,7 @@ namespace PasteList.Services
             // 解析错误响应
             try
             {
-                var errorResponse = JsonSerializer.Deserialize<ApiErrorResponse>(responseBody, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
+                var errorResponse = JsonSerializer.Deserialize<ApiErrorResponse>(responseBody, _jsonOptions);
                 return new AuthResult
                 {
                     Success = false,
@@ -474,9 +502,9 @@ namespace PasteList.Services
         {
             try
             {
-                if (_refreshToken == null && _currentUser == null)
+                if (_refreshToken == null)
                 {
-                    _logger?.LogDebug("没有凭证需要保存");
+                    _logger?.LogDebug("没有凭证需要保存: RefreshToken为null");
                     return;
                 }
 
@@ -486,13 +514,13 @@ namespace PasteList.Services
                     User = _currentUser
                 };
 
-                var json = JsonSerializer.Serialize(savedAuth);
+                var json = JsonSerializer.Serialize(savedAuth, _jsonOptions);
                 await File.WriteAllTextAsync(_configFilePath, json);
-                _logger?.LogDebug("凭证已保存到文件");
+                _logger?.LogDebug($"凭证已保存到文件: {_configFilePath}, 长度: {json.Length}");
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "保存凭证时发生错误");
+                _logger?.LogError(ex, $"保存凭证时发生错误: {_configFilePath}");
             }
         }
 
@@ -512,7 +540,11 @@ namespace PasteList.Services
                 if (File.Exists(_configFilePath))
                 {
                     File.Delete(_configFilePath);
-                    _logger?.LogDebug("凭证文件已删除");
+                    _logger?.LogDebug($"凭证文件已删除: {_configFilePath}");
+                }
+                else
+                {
+                     _logger?.LogDebug($"尝试删除凭证文件但文件不存在: {_configFilePath}");
                 }
             }
             catch (Exception ex)
@@ -526,7 +558,9 @@ namespace PasteList.Services
         /// </summary>
         private string GetDeviceId()
         {
-            return Environment.MachineName + "_" + Environment.UserName;
+            var deviceId = Environment.MachineName + "_" + Environment.UserName;
+            // _logger?.LogDebug($"获取设备ID: {deviceId}");
+            return deviceId;
         }
 
         /// <summary>
@@ -550,6 +584,11 @@ namespace PasteList.Services
         {
             public UserInfo? User { get; set; }
             public TokenInfo? Token { get; set; }
+            
+            // 支持刷新令牌接口返回的扁平结构
+            public string? AccessToken { get; set; }
+            public string? RefreshToken { get; set; }
+            public int? ExpiresIn { get; set; }
         }
 
         private class TokenInfo
@@ -572,7 +611,7 @@ namespace PasteList.Services
             public string? Message { get; set; }
         }
 
-        private class SavedAuthData
+        public class SavedAuthData
         {
             public string? RefreshToken { get; set; }
             public UserInfo? User { get; set; }
