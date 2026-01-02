@@ -136,5 +136,33 @@ namespace PasteList.Services
         /// </summary>
         /// <returns>访问令牌，如果未登录则返回null</returns>
         string? GetAccessToken();
+
+        /// <summary>
+        /// 上传剪贴板项到服务器
+        /// </summary>
+        /// <param name="content">剪贴板内容</param>
+        /// <returns>上传结果</returns>
+        Task<UploadResult> UploadClipboardItemAsync(string content);
+    }
+
+    /// <summary>
+    /// 上传结果模型
+    /// </summary>
+    public class UploadResult
+    {
+        /// <summary>
+        /// 是否成功
+        /// </summary>
+        public bool Success { get; set; }
+
+        /// <summary>
+        /// 错误消息
+        /// </summary>
+        public string? ErrorMessage { get; set; }
+
+        /// <summary>
+        /// 成功消息
+        /// </summary>
+        public string? Message { get; set; }
     }
 }

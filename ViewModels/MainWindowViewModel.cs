@@ -20,6 +20,7 @@ namespace PasteList.ViewModels
     {
         private readonly IClipboardService _clipboardService = null!;
         private readonly IClipboardHistoryService _historyService = null!;
+        private readonly IAuthService? _authService;
         private readonly ILoggerService? _logger;
         private bool _disposed = false;
         
@@ -54,11 +55,13 @@ namespace PasteList.ViewModels
         /// <param name="clipboardService">剪贴板服务</param>
         /// <param name="historyService">历史记录服务</param>
         /// <param name="logger">日志服务</param>
-        public MainWindowViewModel(IClipboardService clipboardService, IClipboardHistoryService historyService, ILoggerService? logger = null)
+        /// <param name="authService">认证服务</param>
+        public MainWindowViewModel(IClipboardService clipboardService, IClipboardHistoryService historyService, ILoggerService? logger = null, IAuthService? authService = null)
         {
             _clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
             _historyService = historyService ?? throw new ArgumentNullException(nameof(historyService));
             _logger = logger;
+            _authService = authService;
             _clipboardItems = new ObservableCollection<ClipboardItem>();
 
             InitializeCommands();
@@ -99,6 +102,7 @@ namespace PasteList.ViewModels
                 // 更新相关命令的可执行状态
                 ((RelayCommand)DoubleClickItemCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)DeleteItemCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)UploadItemCommand).RaiseCanExecuteChanged();
             }
         }
         
@@ -184,6 +188,11 @@ namespace PasteList.ViewModels
         /// 删除项目命令
         /// </summary>
         public ICommand DeleteItemCommand { get; private set; } = null!;
+
+        /// <summary>
+        /// 上传项目命令
+        /// </summary>
+        public ICommand UploadItemCommand { get; private set; } = null!;
         
         #endregion
 
@@ -272,6 +281,72 @@ namespace PasteList.ViewModels
             {
                 stopwatch.Stop();
                 _logger?.LogPerformance("删除记录操作", stopwatch.ElapsedMilliseconds);
+            }
+        }
+
+        /// <summary>
+        /// 处理上传历史记录项事件
+        /// </summary>
+        private async Task OnUploadItem()
+        {
+            if (SelectedItem == null)
+            {
+                _logger?.LogWarning("尝试上传项目但SelectedItem为null");
+                return;
+            }
+
+            if (_authService == null)
+            {
+                MessageBox.Show("认证服务未初始化", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            if (!_authService.IsLoggedIn)
+            {
+                MessageBox.Show("请先登录后再上传", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            try
+            {
+                string contentPreview = SelectedItem.Content.Length > 50
+                    ? SelectedItem.Content.Substring(0, 50) + "..."
+                    : SelectedItem.Content;
+
+                // 格式化上传内容用于日志记录
+                string uploadContentPreview = FormatContentForLog(SelectedItem.Content, GetContentType(SelectedItem.Content));
+                _logger?.LogUserAction("尝试上传记录", $"ID: {SelectedItem.Id}, 内容: {uploadContentPreview}");
+
+                StatusMessage = "正在上传...";
+
+                // 执行上传操作
+                var result = await _authService.UploadClipboardItemAsync(SelectedItem.Content);
+
+                if (result.Success)
+                {
+                    StatusMessage = "上传成功";
+                    _logger?.LogInfo($"记录上传成功，ID: {SelectedItem.Id}, 内容: {uploadContentPreview}");
+                    MessageBox.Show("上传成功", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    StatusMessage = $"上传失败: {result.ErrorMessage}";
+                    _logger?.LogError($"记录上传失败，ID: {SelectedItem.Id}, 错误: {result.ErrorMessage}");
+                    MessageBox.Show($"上传失败: {result.ErrorMessage}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "上传记录时发生错误");
+                StatusMessage = $"上传失败: {ex.Message}";
+                MessageBox.Show($"上传记录时发生错误: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                stopwatch.Stop();
+                _logger?.LogPerformance("上传记录操作", stopwatch.ElapsedMilliseconds);
             }
         }
 
@@ -637,6 +712,11 @@ namespace PasteList.ViewModels
             DeleteItemCommand = new RelayCommand(
                 executeAsync: async () => await OnDeleteItem(),
                 canExecute: () => SelectedItem != null
+            );
+
+            UploadItemCommand = new RelayCommand(
+                executeAsync: async () => await OnUploadItem(),
+                canExecute: () => SelectedItem != null && _authService != null
             );
         }
         

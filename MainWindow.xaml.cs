@@ -201,7 +201,7 @@ namespace PasteList
             }
 
             // 初始化ViewModel
-            _viewModel = new MainWindowViewModel(_clipboardService, _historyService, _logger);
+            _viewModel = new MainWindowViewModel(_clipboardService, _historyService, _logger, _authService);
             _logger.LogInfo("ViewModel初始化完成");
 
             // 设置数据上下文

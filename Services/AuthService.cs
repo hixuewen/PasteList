@@ -564,6 +564,97 @@ namespace PasteList.Services
         }
 
         /// <summary>
+        /// 上传剪贴板项到服务器
+        /// </summary>
+        /// <param name="content">剪贴板内容</param>
+        /// <returns>上传结果</returns>
+        public async Task<UploadResult> UploadClipboardItemAsync(string content)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(content))
+                {
+                    return new UploadResult
+                    {
+                        Success = false,
+                        ErrorMessage = "内容不能为空"
+                    };
+                }
+
+                // 检查是否已登录
+                var accessToken = await GetAccessTokenAsync();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    return new UploadResult
+                    {
+                        Success = false,
+                        ErrorMessage = "未登录，请先登录"
+                    };
+                }
+
+                _logger?.LogUserAction("上传剪贴板项", $"内容长度: {content.Length}");
+
+                var requestBody = new
+                {
+                    content,
+                    deviceId = GetDeviceId(),
+                    createdAt = DateTime.UtcNow.ToString("o")
+                };
+
+                var json = JsonSerializer.Serialize(requestBody);
+                var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
+
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                var response = await _httpClient.PostAsync($"{BaseUrl}/clipboard/items", httpContent);
+                var responseBody = await response.Content.ReadAsStringAsync();
+
+                _logger?.LogDebug($"上传响应: {response.StatusCode}");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    _logger?.LogInfo("剪贴板项上传成功");
+                    return new UploadResult
+                    {
+                        Success = true,
+                        Message = "上传成功"
+                    };
+                }
+                else
+                {
+                    // 解析错误响应
+                    try
+                    {
+                        var errorResponse = JsonSerializer.Deserialize<ApiErrorResponse>(responseBody, _jsonOptions);
+                        var errorMessage = errorResponse?.Error?.Message ?? $"上传失败: {response.StatusCode}";
+                        _logger?.LogWarning($"上传失败: {errorMessage}");
+                        return new UploadResult
+                        {
+                            Success = false,
+                            ErrorMessage = errorMessage
+                        };
+                    }
+                    catch
+                    {
+                        return new UploadResult
+                        {
+                            Success = false,
+                            ErrorMessage = $"上传失败: {response.StatusCode}"
+                        };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "上传剪贴板项时发生错误");
+                return new UploadResult
+                {
+                    Success = false,
+                    ErrorMessage = $"上传失败: {ex.Message}"
+                };
+            }
+        }
+
+        /// <summary>
         /// 触发登录状态变化事件
         /// </summary>
         private void OnLoginStateChanged(bool isLoggedIn)
