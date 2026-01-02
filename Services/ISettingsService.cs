@@ -14,6 +14,11 @@ namespace PasteList.Services
         bool IsSyncEnabled { get; set; }
 
         /// <summary>
+        /// 服务器地址
+        /// </summary>
+        string ServerUrl { get; set; }
+
+        /// <summary>
         /// 加载设置
         /// </summary>
         Task LoadAsync();

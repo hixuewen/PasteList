@@ -18,6 +18,7 @@ namespace PasteList.Services
     {
         private readonly HttpClient _httpClient;
         private readonly ILoggerService? _logger;
+        private readonly ISettingsService? _settingsService;
         private readonly string _configFilePath;
         private readonly SemaphoreSlim _authLock = new SemaphoreSlim(1, 1);
 
@@ -34,9 +35,9 @@ namespace PasteList.Services
         };
 
         /// <summary>
-        /// API服务器基础地址
+        /// API服务器基础地址（从设置服务读取，如果设置服务不可用则使用默认值）
         /// </summary>
-        public string BaseUrl { get; set; } = "http://localhost:3000/api/v1";
+        public string BaseUrl => _settingsService?.ServerUrl ?? "http://47.115.203.233:3005/api/v1";
 
         /// <summary>
         /// 当前是否已登录
@@ -56,9 +57,11 @@ namespace PasteList.Services
         /// <summary>
         /// 构造函数
         /// </summary>
+        /// <param name="settingsService">设置服务</param>
         /// <param name="logger">日志服务</param>
-        public AuthService(ILoggerService? logger = null)
+        public AuthService(ISettingsService? settingsService = null, ILoggerService? logger = null)
         {
+            _settingsService = settingsService;
             _logger = logger;
             _httpClient = new HttpClient();
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -67,7 +70,7 @@ namespace PasteList.Services
             var appDir = AppDomain.CurrentDomain.BaseDirectory;
             _configFilePath = Path.Combine(appDir, "auth.json");
             
-            _logger?.LogDebug($"AuthService初始化完成, 凭证路径: {_configFilePath}");
+            _logger?.LogDebug($"AuthService初始化完成, 凭证路径: {_configFilePath}, 服务器地址: {BaseUrl}");
         }
 
         /// <summary>

@@ -59,6 +59,22 @@ namespace PasteList.Services
         }
 
         /// <summary>
+        /// 服务器地址
+        /// </summary>
+        public string ServerUrl
+        {
+            get => _settings.ServerUrl;
+            set
+            {
+                if (_settings.ServerUrl != value)
+                {
+                    _settings.ServerUrl = value;
+                    _ = SaveAsync();
+                }
+            }
+        }
+
+        /// <summary>
         /// 加载设置
         /// </summary>
         public async Task LoadAsync()
@@ -77,7 +93,7 @@ namespace PasteList.Services
                 if (settings != null)
                 {
                     _settings = settings;
-                    _logger?.LogDebug($"设置加载成功，同步状态: {_settings.IsSyncEnabled}");
+                    _logger?.LogDebug($"设置加载成功，同步状态: {_settings.IsSyncEnabled}，服务器地址: {_settings.ServerUrl}");
                 }
             }
             catch (Exception ex)
@@ -122,6 +138,11 @@ namespace PasteList.Services
             /// 是否启用同步
             /// </summary>
             public bool IsSyncEnabled { get; set; } = false;
+
+            /// <summary>
+            /// 服务器地址
+            /// </summary>
+            public string ServerUrl { get; set; } = "http://47.115.203.233:3005/api/v1";
         }
     }
 }

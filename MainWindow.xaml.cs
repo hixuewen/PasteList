@@ -178,14 +178,14 @@ namespace PasteList
             _startupService = new StartupService();
             _logger.LogInfo("启动服务初始化完成");
 
-            // 初始化认证服务
-            _authService = new AuthService(_logger);
-            _logger.LogInfo("认证服务初始化完成");
-
-            // 初始化设置服务
+            // 初始化设置服务（需要在认证服务之前，因为认证服务需要读取服务器地址）
             _settingsService = new SettingsService(_logger);
             await _settingsService.LoadAsync();
             _logger.LogInfo("设置服务初始化完成");
+
+            // 初始化认证服务
+            _authService = new AuthService(_settingsService, _logger);
+            _logger.LogInfo("认证服务初始化完成");
 
             // 尝试自动登录（使用保存的凭证）
             try
