@@ -21,6 +21,7 @@ namespace PasteList.ViewModels
         private readonly IClipboardService _clipboardService = null!;
         private readonly IClipboardHistoryService _historyService = null!;
         private readonly IAuthService? _authService;
+        private readonly ISettingsService? _settingsService;
         private readonly ILoggerService? _logger;
         private bool _disposed = false;
         
@@ -56,12 +57,14 @@ namespace PasteList.ViewModels
         /// <param name="historyService">历史记录服务</param>
         /// <param name="logger">日志服务</param>
         /// <param name="authService">认证服务</param>
-        public MainWindowViewModel(IClipboardService clipboardService, IClipboardHistoryService historyService, ILoggerService? logger = null, IAuthService? authService = null)
+        /// <param name="settingsService">设置服务</param>
+        public MainWindowViewModel(IClipboardService clipboardService, IClipboardHistoryService historyService, ILoggerService? logger = null, IAuthService? authService = null, ISettingsService? settingsService = null)
         {
             _clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
             _historyService = historyService ?? throw new ArgumentNullException(nameof(historyService));
             _logger = logger;
             _authService = authService;
+            _settingsService = settingsService;
             _clipboardItems = new ObservableCollection<ClipboardItem>();
 
             InitializeCommands();
@@ -298,6 +301,9 @@ namespace PasteList.ViewModels
 
                         StatusMessage = serverDeleteSuccess ? "记录已同步删除" : "记录已删除";
                         _logger?.LogInfo($"记录删除成功，ID: {itemId}, 同步删除: {serverDeleteSuccess}, 内容: {deleteContentPreview}");
+
+                        // 如果启用了同步，触发从服务器同步
+                        await SyncFromServerAsync();
                     }
                     else
                     {
@@ -370,6 +376,9 @@ namespace PasteList.ViewModels
                     StatusMessage = "上传成功";
                     _logger?.LogInfo($"记录上传成功，ID: {SelectedItem.Id}, 内容: {uploadContentPreview}");
                     MessageBox.Show("上传成功", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                    // 如果启用了同步，触发从服务器同步
+                    await SyncFromServerAsync();
                 }
                 else
                 {
@@ -828,6 +837,9 @@ namespace PasteList.ViewModels
                 });
 
                 _logger?.LogUserAction("剪贴板内容自动添加", $"类型: {contentType}, 长度: {e.ClipboardItem.Content.Length}");
+
+                // 如果启用了同步，触发从服务器同步
+                await SyncFromServerAsync();
             }
             catch (Exception ex)
             {
@@ -931,6 +943,70 @@ namespace PasteList.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"搜索失败: {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// 从服务器同步数据到本地
+        /// </summary>
+        private async Task SyncFromServerAsync()
+        {
+            try
+            {
+                // 检查是否启用同步
+                if (_settingsService == null || !_settingsService.IsSyncEnabled)
+                {
+                    return;
+                }
+
+                // 检查是否已登录
+                if (_authService == null || !_authService.IsLoggedIn)
+                {
+                    return;
+                }
+
+                _logger?.LogUserAction("触发同步", "从服务器获取数据");
+                StatusMessage = "正在同步...";
+
+                // 从服务器获取所有剪贴板项
+                var syncResult = await _authService.GetAllClipboardItemsAsync();
+
+                if (!syncResult.Success)
+                {
+                    _logger?.LogWarning($"同步失败: {syncResult.ErrorMessage}");
+                    StatusMessage = $"同步失败: {syncResult.ErrorMessage}";
+                    return;
+                }
+
+                if (syncResult.Items.Count == 0)
+                {
+                    _logger?.LogInfo("服务器上没有数据需要同步");
+                    return;
+                }
+
+                // 获取所有内容用于批量添加（去重）
+                var contents = syncResult.Items.Select(item => item.Content).ToList();
+
+                // 批量添加到本地数据库（自动去重）
+                var addedCount = await _historyService.AddItemsWithDeduplicationAsync(contents);
+
+                if (addedCount > 0)
+                {
+                    _logger?.LogInfo($"同步成功，新增 {addedCount} 条记录");
+                    
+                    // 刷新列表
+                    await LoadHistoryAsync();
+                    StatusMessage = $"同步完成，新增 {addedCount} 条记录";
+                }
+                else
+                {
+                    _logger?.LogInfo("同步完成，本地数据已是最新");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "同步过程中发生错误");
+                StatusMessage = $"同步失败: {ex.Message}";
             }
         }
         

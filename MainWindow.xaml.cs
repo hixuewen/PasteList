@@ -108,6 +108,7 @@ namespace PasteList
         private ClipboardDbContext? _dbContext;
         private IStartupService? _startupService;
         private IAuthService? _authService;
+        private ISettingsService? _settingsService;
         private ILoggerService? _logger;
 
         /// <summary>
@@ -181,6 +182,11 @@ namespace PasteList
             _authService = new AuthService(_logger);
             _logger.LogInfo("认证服务初始化完成");
 
+            // 初始化设置服务
+            _settingsService = new SettingsService(_logger);
+            await _settingsService.LoadAsync();
+            _logger.LogInfo("设置服务初始化完成");
+
             // 尝试自动登录（使用保存的凭证）
             try
             {
@@ -201,7 +207,7 @@ namespace PasteList
             }
 
             // 初始化ViewModel
-            _viewModel = new MainWindowViewModel(_clipboardService, _historyService, _logger, _authService);
+            _viewModel = new MainWindowViewModel(_clipboardService, _historyService, _logger, _authService, _settingsService);
             _logger.LogInfo("ViewModel初始化完成");
 
             // 设置数据上下文
@@ -601,8 +607,14 @@ namespace PasteList
                     return;
                 }
 
+                if (_settingsService == null)
+                {
+                    MessageBox.Show("设置服务未初始化，无法打开设置", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
                 // 创建设置窗口
-                var settingsWindow = new SettingsWindow(_startupService, _authService, _historyService, _logger);
+                var settingsWindow = new SettingsWindow(_startupService, _authService, _historyService, _settingsService, _logger);
                 settingsWindow.Owner = this;
 
                 // 订阅同步完成事件，刷新主窗口列表

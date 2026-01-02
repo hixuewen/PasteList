@@ -16,6 +16,7 @@ namespace PasteList.ViewModels
         private readonly IStartupService _startupService;
         private readonly IAuthService _authService;
         private readonly IClipboardHistoryService _historyService;
+        private readonly ISettingsService _settingsService;
         private readonly ILoggerService? _logger;
         private bool _isStartupEnabled;
         private bool _isSyncEnabled;
@@ -40,12 +41,14 @@ namespace PasteList.ViewModels
         /// <param name="startupService">启动服务</param>
         /// <param name="authService">认证服务</param>
         /// <param name="historyService">剪贴板历史服务</param>
+        /// <param name="settingsService">设置服务</param>
         /// <param name="logger">日志服务</param>
-        public SettingsViewModel(IStartupService startupService, IAuthService authService, IClipboardHistoryService historyService, ILoggerService? logger = null)
+        public SettingsViewModel(IStartupService startupService, IAuthService authService, IClipboardHistoryService historyService, ISettingsService settingsService, ILoggerService? logger = null)
         {
             _startupService = startupService ?? throw new ArgumentNullException(nameof(startupService));
             _authService = authService ?? throw new ArgumentNullException(nameof(authService));
             _historyService = historyService ?? throw new ArgumentNullException(nameof(historyService));
+            _settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
             _logger = logger;
 
             // 初始化命令
@@ -115,21 +118,25 @@ namespace PasteList.ViewModels
             {
                 if (_isSyncEnabled != value)
                 {
+                    // 检查是否可以启用同步
+                    if (value && !_authService.IsLoggedIn)
+                    {
+                        SyncStatusMessage = "请先登录后再启用同步";
+                        return;
+                    }
+
                     _isSyncEnabled = value;
                     HasChanges = true;
                     OnPropertyChanged();
                     ((RelayCommand)SaveCommand).RaiseCanExecuteChanged();
 
+                    // 保存到设置服务
+                    _settingsService.IsSyncEnabled = value;
+
                     // 当勾选同步时，触发同步操作
                     if (_isSyncEnabled && _authService.IsLoggedIn)
                     {
                         _ = SyncFromServerAsync();
-                    }
-                    else if (_isSyncEnabled && !_authService.IsLoggedIn)
-                    {
-                        SyncStatusMessage = "请先登录后再启用同步";
-                        _isSyncEnabled = false;
-                        OnPropertyChanged();
                     }
                 }
             }
@@ -406,18 +413,22 @@ namespace PasteList.ViewModels
         /// <summary>
         /// 加载当前设置
         /// </summary>
-        public Task LoadSettingsAsync()
+        public async Task LoadSettingsAsync()
         {
             try
             {
                 // 加载开机启动设置
                 _isStartupEnabled = _startupService.IsStartupEnabled();
 
+                // 加载同步设置
+                await _settingsService.LoadAsync();
+                _isSyncEnabled = _settingsService.IsSyncEnabled;
+
                 HasChanges = false;
                 OnPropertyChanged(nameof(IsStartupEnabled));
+                OnPropertyChanged(nameof(IsSyncEnabled));
 
-                _logger?.LogDebug($"设置窗口加载完成，开机启动状态: {(_isStartupEnabled ? "已启用" : "已禁用")}");
-                return Task.CompletedTask;
+                _logger?.LogDebug($"设置窗口加载完成，开机启动状态: {(_isStartupEnabled ? "已启用" : "已禁用")}，同步状态: {(_isSyncEnabled ? "已启用" : "已禁用")}");
             }
             catch (Exception ex)
             {

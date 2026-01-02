@@ -24,13 +24,14 @@ namespace PasteList
         /// <param name="startupService">启动服务</param>
         /// <param name="authService">认证服务</param>
         /// <param name="historyService">剪贴板历史服务</param>
+        /// <param name="settingsService">设置服务</param>
         /// <param name="logger">日志服务</param>
-        public SettingsWindow(IStartupService startupService, IAuthService authService, IClipboardHistoryService historyService, ILoggerService? logger)
+        public SettingsWindow(IStartupService startupService, IAuthService authService, IClipboardHistoryService historyService, ISettingsService settingsService, ILoggerService? logger)
         {
             InitializeComponent();
 
             // 初始化ViewModel
-            _viewModel = new SettingsViewModel(startupService, authService, historyService, logger);
+            _viewModel = new SettingsViewModel(startupService, authService, historyService, settingsService, logger);
             DataContext = _viewModel;
 
             // 订阅清空密码框事件
