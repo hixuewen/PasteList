@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -655,6 +656,199 @@ namespace PasteList.Services
         }
 
         /// <summary>
+        /// 删除服务器上的剪贴板项
+        /// </summary>
+        /// <param name="serverId">服务器端ID</param>
+        /// <returns>删除结果</returns>
+        public async Task<DeleteResult> DeleteClipboardItemAsync(int serverId)
+        {
+            try
+            {
+                // 检查是否已登录
+                var accessToken = await GetAccessTokenAsync();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    return new DeleteResult
+                    {
+                        Success = false,
+                        ErrorMessage = "未登录，请先登录"
+                    };
+                }
+
+                _logger?.LogUserAction("删除服务器剪贴板项", $"ServerId: {serverId}");
+
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                var response = await _httpClient.DeleteAsync($"{BaseUrl}/clipboard/items/{serverId}");
+                var responseBody = await response.Content.ReadAsStringAsync();
+
+                _logger?.LogDebug($"删除响应: {response.StatusCode}");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    _logger?.LogInfo($"服务器剪贴板项删除成功，ServerId: {serverId}");
+                    return new DeleteResult
+                    {
+                        Success = true,
+                        Message = "删除成功"
+                    };
+                }
+                else
+                {
+                    // 解析错误响应
+                    try
+                    {
+                        var errorResponse = JsonSerializer.Deserialize<ApiErrorResponse>(responseBody, _jsonOptions);
+                        var errorMessage = errorResponse?.Error?.Message ?? $"删除失败: {response.StatusCode}";
+                        _logger?.LogWarning($"删除失败: {errorMessage}");
+                        return new DeleteResult
+                        {
+                            Success = false,
+                            ErrorMessage = errorMessage
+                        };
+                    }
+                    catch
+                    {
+                        return new DeleteResult
+                        {
+                            Success = false,
+                            ErrorMessage = $"删除失败: {response.StatusCode}"
+                        };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "删除服务器剪贴板项时发生错误");
+                return new DeleteResult
+                {
+                    Success = false,
+                    ErrorMessage = $"删除失败: {ex.Message}"
+                };
+            }
+        }
+
+        /// <summary>
+        /// 根据内容查找服务器上剪贴板项的ID
+        /// </summary>
+        /// <param name="content">剪贴板内容</param>
+        /// <returns>服务器端ID，如果未找到则返回null</returns>
+        public async Task<int?> FindServerItemIdByContentAsync(string content)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(content))
+                {
+                    return null;
+                }
+
+                // 检查是否已登录
+                var accessToken = await GetAccessTokenAsync();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    _logger?.LogWarning("查找服务器剪贴板项失败：未登录");
+                    return null;
+                }
+
+                _logger?.LogDebug($"正在查找服务器剪贴板项，内容长度: {content.Length}");
+
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                
+                // 获取服务器上的剪贴板项目列表，使用较大的 pageSize 以获取更多项目
+                var response = await _httpClient.GetAsync($"{BaseUrl}/clipboard/items?pageSize=100");
+                var responseBody = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var listResponse = JsonSerializer.Deserialize<ClipboardListResponse>(responseBody, _jsonOptions);
+                    
+                    if (listResponse?.Data?.Items != null)
+                    {
+                        // 根据内容匹配找到对应的服务器端ID
+                        foreach (var item in listResponse.Data.Items)
+                        {
+                            if (item.Content == content)
+                            {
+                                _logger?.LogDebug($"找到匹配的服务器剪贴板项，ServerId: {item.Id}");
+                                return item.Id;
+                            }
+                        }
+                    }
+                    
+                    _logger?.LogDebug("未找到匹配的服务器剪贴板项");
+                    return null;
+                }
+                else
+                {
+                    _logger?.LogWarning($"获取服务器剪贴板列表失败: {response.StatusCode}");
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "查找服务器剪贴板项时发生错误");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 根据内容删除服务器上的剪贴板项（先查找ID再删除）
+        /// </summary>
+        /// <param name="content">剪贴板内容</param>
+        /// <returns>删除结果</returns>
+        public async Task<DeleteResult> DeleteClipboardItemByContentAsync(string content)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(content))
+                {
+                    return new DeleteResult
+                    {
+                        Success = false,
+                        ErrorMessage = "内容不能为空"
+                    };
+                }
+
+                // 检查是否已登录
+                var accessToken = await GetAccessTokenAsync();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    return new DeleteResult
+                    {
+                        Success = false,
+                        ErrorMessage = "未登录，请先登录"
+                    };
+                }
+
+                _logger?.LogUserAction("根据内容删除服务器剪贴板项", $"内容长度: {content.Length}");
+
+                // 先查找服务器端ID
+                var serverId = await FindServerItemIdByContentAsync(content);
+                
+                if (!serverId.HasValue)
+                {
+                    _logger?.LogDebug("服务器上未找到匹配的剪贴板项，跳过服务器删除");
+                    return new DeleteResult
+                    {
+                        Success = true,
+                        Message = "服务器上未找到匹配记录"
+                    };
+                }
+
+                // 调用删除接口
+                return await DeleteClipboardItemAsync(serverId.Value);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "根据内容删除服务器剪贴板项时发生错误");
+                return new DeleteResult
+                {
+                    Success = false,
+                    ErrorMessage = $"删除失败: {ex.Message}"
+                };
+            }
+        }
+
+        /// <summary>
         /// 触发登录状态变化事件
         /// </summary>
         private void OnLoginStateChanged(bool isLoggedIn)
@@ -680,6 +874,35 @@ namespace PasteList.Services
             public string? AccessToken { get; set; }
             public string? RefreshToken { get; set; }
             public int? ExpiresIn { get; set; }
+        }
+
+        private class ClipboardItemData
+        {
+            public int Id { get; set; }
+            public string? Content { get; set; }
+            public string? DeviceId { get; set; }
+            public string? CreatedAt { get; set; }
+        }
+
+        private class ClipboardListResponse
+        {
+            public bool Success { get; set; }
+            public string? Message { get; set; }
+            public ClipboardListData? Data { get; set; }
+        }
+
+        private class ClipboardListData
+        {
+            public List<ClipboardItemData>? Items { get; set; }
+            public PaginationData? Pagination { get; set; }
+        }
+
+        private class PaginationData
+        {
+            public int CurrentPage { get; set; }
+            public int PageSize { get; set; }
+            public int TotalItems { get; set; }
+            public int TotalPages { get; set; }
         }
 
         private class TokenInfo

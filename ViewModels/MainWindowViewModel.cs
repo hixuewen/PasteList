@@ -225,11 +225,17 @@ namespace PasteList.ViewModels
 
                 // 格式化删除内容用于日志记录
                 string deleteContentPreview = FormatContentForLog(SelectedItem.Content, GetContentType(SelectedItem.Content));
-                _logger?.LogUserAction("尝试删除记录", $"ID: {SelectedItem.Id}, 内容: {deleteContentPreview}");
+                _logger?.LogUserAction("尝试删除记录", $"ID: {SelectedItem.Id}, ServerId: {SelectedItem.ServerId}, 内容: {deleteContentPreview}");
+
+                // 根据是否已登录显示不同的确认信息
+                bool willSyncDelete = _authService != null && _authService.IsLoggedIn;
+                string confirmMessage = willSyncDelete
+                    ? $"确定要删除这条记录吗？\n（将同时删除服务器上的记录）\n\n内容预览：{contentPreview}"
+                    : $"确定要删除这条记录吗？\n\n内容预览：{contentPreview}";
 
                 // 显示确认对话框
                 var result = MessageBox.Show(
-                    $"确定要删除这条记录吗？\n\n内容预览：{contentPreview}",
+                    confirmMessage,
                     "删除确认",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question,
@@ -238,10 +244,45 @@ namespace PasteList.ViewModels
 
                 if (result == MessageBoxResult.Yes)
                 {
-                    // 在清空SelectedItem之前保存ID
+                    // 在清空SelectedItem之前保存ID和内容
                     int itemId = SelectedItem.Id;
+                    string itemContent = SelectedItem.Content;
+                    bool serverDeleteSuccess = false;
 
-                    // 执行删除操作
+                    // 如果已登录，先根据内容查找并删除服务器上的记录
+                    if (_authService != null && _authService.IsLoggedIn)
+                    {
+                        StatusMessage = "正在删除服务器记录...";
+                        var serverDeleteResult = await _authService.DeleteClipboardItemByContentAsync(itemContent);
+                        
+                        if (serverDeleteResult.Success)
+                        {
+                            serverDeleteSuccess = true;
+                            _logger?.LogInfo($"服务器记录删除成功");
+                        }
+                        else
+                        {
+                            // 服务器删除失败，询问是否继续删除本地记录
+                            _logger?.LogWarning($"服务器记录删除失败: {serverDeleteResult.ErrorMessage}");
+                            var continueResult = MessageBox.Show(
+                                $"服务器记录删除失败: {serverDeleteResult.ErrorMessage}\n\n是否继续删除本地记录？",
+                                "警告",
+                                MessageBoxButton.YesNo,
+                                MessageBoxImage.Warning,
+                                MessageBoxResult.No
+                            );
+                            
+                            if (continueResult != MessageBoxResult.Yes)
+                            {
+                                StatusMessage = "删除已取消";
+                                return;
+                            }
+                        }
+                    }
+
+                    StatusMessage = "正在删除本地记录...";
+
+                    // 执行本地删除操作
                     var success = await _historyService.DeleteItemAsync(itemId);
 
                     if (success)
@@ -255,8 +296,8 @@ namespace PasteList.ViewModels
                         // 清空选中项
                         SelectedItem = null;
 
-                        StatusMessage = "记录已删除";
-                        _logger?.LogInfo($"记录删除成功，ID: {itemId}, 内容: {deleteContentPreview}");
+                        StatusMessage = serverDeleteSuccess ? "记录已同步删除" : "记录已删除";
+                        _logger?.LogInfo($"记录删除成功，ID: {itemId}, 同步删除: {serverDeleteSuccess}, 内容: {deleteContentPreview}");
                     }
                     else
                     {

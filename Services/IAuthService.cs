@@ -143,12 +143,54 @@ namespace PasteList.Services
         /// <param name="content">剪贴板内容</param>
         /// <returns>上传结果</returns>
         Task<UploadResult> UploadClipboardItemAsync(string content);
+
+        /// <summary>
+        /// 删除服务器上的剪贴板项
+        /// </summary>
+        /// <param name="serverId">服务器端ID</param>
+        /// <returns>删除结果</returns>
+        Task<DeleteResult> DeleteClipboardItemAsync(int serverId);
+
+        /// <summary>
+        /// 根据内容查找服务器上剪贴板项的ID
+        /// </summary>
+        /// <param name="content">剪贴板内容</param>
+        /// <returns>服务器端ID，如果未找到则返回null</returns>
+        Task<int?> FindServerItemIdByContentAsync(string content);
+
+        /// <summary>
+        /// 根据内容删除服务器上的剪贴板项（先查找ID再删除）
+        /// </summary>
+        /// <param name="content">剪贴板内容</param>
+        /// <returns>删除结果</returns>
+        Task<DeleteResult> DeleteClipboardItemByContentAsync(string content);
     }
 
     /// <summary>
     /// 上传结果模型
     /// </summary>
     public class UploadResult
+    {
+        /// <summary>
+        /// 是否成功
+        /// </summary>
+        public bool Success { get; set; }
+
+        /// <summary>
+        /// 错误消息
+        /// </summary>
+        public string? ErrorMessage { get; set; }
+
+        /// <summary>
+        /// 成功消息
+        /// </summary>
+        public string? Message { get; set; }
+    }
+
+    /// <summary>
+    /// 删除结果模型
+    /// </summary>
+    public class DeleteResult
     {
         /// <summary>
         /// 是否成功

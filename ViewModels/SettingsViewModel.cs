@@ -17,6 +17,7 @@ namespace PasteList.ViewModels
         private readonly IAuthService _authService;
         private readonly ILoggerService? _logger;
         private bool _isStartupEnabled;
+        private bool _isSyncEnabled;
         private bool _hasChanges;
 
         // 认证相关字段
@@ -93,6 +94,24 @@ namespace PasteList.ViewModels
                 if (_isStartupEnabled != value)
                 {
                     _isStartupEnabled = value;
+                    HasChanges = true;
+                    OnPropertyChanged();
+                    ((RelayCommand)SaveCommand).RaiseCanExecuteChanged();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 是否启用同步
+        /// </summary>
+        public bool IsSyncEnabled
+        {
+            get => _isSyncEnabled;
+            set
+            {
+                if (_isSyncEnabled != value)
+                {
+                    _isSyncEnabled = value;
                     HasChanges = true;
                     OnPropertyChanged();
                     ((RelayCommand)SaveCommand).RaiseCanExecuteChanged();
