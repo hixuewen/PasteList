@@ -225,7 +225,7 @@ namespace PasteList.ViewModels
 
                 // 格式化删除内容用于日志记录
                 string deleteContentPreview = FormatContentForLog(SelectedItem.Content, GetContentType(SelectedItem.Content));
-                _logger?.LogUserAction("尝试删除记录", $"ID: {SelectedItem.Id}, ServerId: {SelectedItem.ServerId}, 内容: {deleteContentPreview}");
+                _logger?.LogUserAction("尝试删除记录", $"ID: {SelectedItem.Id}, 内容: {deleteContentPreview}");
 
                 // 根据是否已登录显示不同的确认信息
                 bool willSyncDelete = _authService != null && _authService.IsLoggedIn;
