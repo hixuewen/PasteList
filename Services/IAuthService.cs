@@ -164,6 +164,64 @@ namespace PasteList.Services
         /// <param name="content">剪贴板内容</param>
         /// <returns>删除结果</returns>
         Task<DeleteResult> DeleteClipboardItemByContentAsync(string content);
+
+        /// <summary>
+        /// 获取服务器上当前用户的所有剪贴板项
+        /// </summary>
+        /// <returns>同步结果，包含服务器上的所有剪贴板项</returns>
+        Task<SyncResult> GetAllClipboardItemsAsync();
+    }
+
+    /// <summary>
+    /// 同步结果模型
+    /// </summary>
+    public class SyncResult
+    {
+        /// <summary>
+        /// 是否成功
+        /// </summary>
+        public bool Success { get; set; }
+
+        /// <summary>
+        /// 错误消息
+        /// </summary>
+        public string? ErrorMessage { get; set; }
+
+        /// <summary>
+        /// 成功消息
+        /// </summary>
+        public string? Message { get; set; }
+
+        /// <summary>
+        /// 服务器上的剪贴板项列表
+        /// </summary>
+        public List<ServerClipboardItem> Items { get; set; } = new List<ServerClipboardItem>();
+    }
+
+    /// <summary>
+    /// 服务器剪贴板项模型
+    /// </summary>
+    public class ServerClipboardItem
+    {
+        /// <summary>
+        /// 服务器端ID
+        /// </summary>
+        public int Id { get; set; }
+
+        /// <summary>
+        /// 剪贴板内容
+        /// </summary>
+        public string Content { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 设备ID
+        /// </summary>
+        public string? DeviceId { get; set; }
+
+        /// <summary>
+        /// 创建时间
+        /// </summary>
+        public DateTime? CreatedAt { get; set; }
     }
 
     /// <summary>

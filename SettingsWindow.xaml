@@ -350,10 +350,28 @@
                         <TextBlock Text="高级选项" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
                         
                         <!-- 同步设置 -->
-                        <CheckBox Content="同步"
+                        <CheckBox Content="同步（勾选后将从服务器同步数据到本地）"
                                   IsChecked="{Binding IsSyncEnabled}"
                                   Margin="10,5,0,0"
                                   FontSize="13"/>
+                        
+                        <!-- 同步状态消息 -->
+                        <TextBlock Text="{Binding SyncStatusMessage}"
+                                   FontSize="12"
+                                   Margin="30,10,0,0"
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding HasSyncStatusMessage, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="#666666"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SyncStatusMessage}" Value="正在同步...">
+                                            <Setter Property="Foreground" Value="#2196F3"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
                 </Border>
             </TabItem>

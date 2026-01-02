@@ -15,10 +15,12 @@ namespace PasteList.ViewModels
     {
         private readonly IStartupService _startupService;
         private readonly IAuthService _authService;
+        private readonly IClipboardHistoryService _historyService;
         private readonly ILoggerService? _logger;
         private bool _isStartupEnabled;
         private bool _isSyncEnabled;
         private bool _hasChanges;
+        private string _syncStatusMessage = string.Empty;
 
         // 认证相关字段
         private string _username = string.Empty;
@@ -37,11 +39,13 @@ namespace PasteList.ViewModels
         /// </summary>
         /// <param name="startupService">启动服务</param>
         /// <param name="authService">认证服务</param>
+        /// <param name="historyService">剪贴板历史服务</param>
         /// <param name="logger">日志服务</param>
-        public SettingsViewModel(IStartupService startupService, IAuthService authService, ILoggerService? logger = null)
+        public SettingsViewModel(IStartupService startupService, IAuthService authService, IClipboardHistoryService historyService, ILoggerService? logger = null)
         {
             _startupService = startupService ?? throw new ArgumentNullException(nameof(startupService));
             _authService = authService ?? throw new ArgumentNullException(nameof(authService));
+            _historyService = historyService ?? throw new ArgumentNullException(nameof(historyService));
             _logger = logger;
 
             // 初始化命令
@@ -115,9 +119,43 @@ namespace PasteList.ViewModels
                     HasChanges = true;
                     OnPropertyChanged();
                     ((RelayCommand)SaveCommand).RaiseCanExecuteChanged();
+
+                    // 当勾选同步时，触发同步操作
+                    if (_isSyncEnabled && _authService.IsLoggedIn)
+                    {
+                        _ = SyncFromServerAsync();
+                    }
+                    else if (_isSyncEnabled && !_authService.IsLoggedIn)
+                    {
+                        SyncStatusMessage = "请先登录后再启用同步";
+                        _isSyncEnabled = false;
+                        OnPropertyChanged();
+                    }
                 }
             }
         }
+
+        /// <summary>
+        /// 同步状态消息
+        /// </summary>
+        public string SyncStatusMessage
+        {
+            get => _syncStatusMessage;
+            set
+            {
+                if (_syncStatusMessage != value)
+                {
+                    _syncStatusMessage = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(HasSyncStatusMessage));
+                }
+            }
+        }
+
+        /// <summary>
+        /// 是否有同步状态消息
+        /// </summary>
+        public bool HasSyncStatusMessage => !string.IsNullOrEmpty(SyncStatusMessage);
 
         /// <summary>
         /// 是否有未保存的更改
@@ -605,6 +643,78 @@ namespace PasteList.ViewModels
             ((RelayCommand)RegisterCommand).RaiseCanExecuteChanged();
             ((RelayCommand)LogoutCommand).RaiseCanExecuteChanged();
             ((RelayCommand)ToggleModeCommand).RaiseCanExecuteChanged();
+        }
+
+        #endregion
+
+        #region 同步相关方法
+
+        /// <summary>
+        /// 从服务器同步数据到本地
+        /// </summary>
+        private async Task SyncFromServerAsync()
+        {
+            try
+            {
+                SyncStatusMessage = "正在同步...";
+                _logger?.LogUserAction("开始同步", "从服务器获取数据");
+
+                // 从服务器获取所有剪贴板项
+                var syncResult = await _authService.GetAllClipboardItemsAsync();
+
+                if (!syncResult.Success)
+                {
+                    SyncStatusMessage = $"同步失败: {syncResult.ErrorMessage}";
+                    _logger?.LogWarning($"同步失败: {syncResult.ErrorMessage}");
+                    return;
+                }
+
+                if (syncResult.Items.Count == 0)
+                {
+                    SyncStatusMessage = "服务器上没有数据需要同步";
+                    _logger?.LogInfo("服务器上没有数据需要同步");
+                    return;
+                }
+
+                // 获取所有内容用于批量添加（去重）
+                var contents = syncResult.Items.Select(item => item.Content).ToList();
+
+                // 批量添加到本地数据库（自动去重）
+                var addedCount = await _historyService.AddItemsWithDeduplicationAsync(contents);
+
+                if (addedCount > 0)
+                {
+                    SyncStatusMessage = $"同步成功！新增 {addedCount} 条记录";
+                    _logger?.LogInfo($"同步成功，新增 {addedCount} 条记录（服务器共 {syncResult.Items.Count} 条）");
+                    
+                    // 触发同步完成事件，通知主窗口刷新列表
+                    OnSyncCompleted(addedCount);
+                }
+                else
+                {
+                    SyncStatusMessage = "同步完成，没有新数据（本地已是最新）";
+                    _logger?.LogInfo("同步完成，本地数据已是最新");
+                }
+            }
+            catch (Exception ex)
+            {
+                SyncStatusMessage = $"同步失败: {ex.Message}";
+                _logger?.LogError(ex, "同步过程中发生错误");
+            }
+        }
+
+        /// <summary>
+        /// 同步完成事件
+        /// </summary>
+        public event EventHandler<int>? SyncCompleted;
+
+        /// <summary>
+        /// 触发同步完成事件
+        /// </summary>
+        /// <param name="addedCount">新增的记录数</param>
+        private void OnSyncCompleted(int addedCount)
+        {
+            SyncCompleted?.Invoke(this, addedCount);
         }
 
         #endregion

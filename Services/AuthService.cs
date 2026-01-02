@@ -849,6 +849,111 @@ namespace PasteList.Services
         }
 
         /// <summary>
+        /// 获取服务器上当前用户的所有剪贴板项
+        /// </summary>
+        /// <returns>同步结果，包含服务器上的所有剪贴板项</returns>
+        public async Task<SyncResult> GetAllClipboardItemsAsync()
+        {
+            try
+            {
+                // 检查是否已登录
+                var accessToken = await GetAccessTokenAsync();
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    return new SyncResult
+                    {
+                        Success = false,
+                        ErrorMessage = "未登录，请先登录"
+                    };
+                }
+
+                _logger?.LogUserAction("获取服务器剪贴板项", "开始同步");
+
+                var allItems = new List<ServerClipboardItem>();
+                int currentPage = 1;
+                int pageSize = 100;
+                int totalPages = 1;
+
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+                // 分页获取所有数据
+                do
+                {
+                    var response = await _httpClient.GetAsync($"{BaseUrl}/clipboard/items?page={currentPage}&pageSize={pageSize}");
+                    var responseBody = await response.Content.ReadAsStringAsync();
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var listResponse = JsonSerializer.Deserialize<ClipboardListResponse>(responseBody, _jsonOptions);
+
+                        if (listResponse?.Data?.Items != null)
+                        {
+                            foreach (var item in listResponse.Data.Items)
+                            {
+                                allItems.Add(new ServerClipboardItem
+                                {
+                                    Id = item.Id,
+                                    Content = item.Content ?? string.Empty,
+                                    DeviceId = item.DeviceId,
+                                    CreatedAt = ParseDateTime(item.CreatedAt)
+                                });
+                            }
+
+                            // 获取分页信息
+                            if (listResponse.Data.Pagination != null)
+                            {
+                                totalPages = listResponse.Data.Pagination.TotalPages;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        _logger?.LogWarning($"获取服务器剪贴板列表失败: {response.StatusCode}");
+                        return new SyncResult
+                        {
+                            Success = false,
+                            ErrorMessage = $"获取服务器数据失败: {response.StatusCode}"
+                        };
+                    }
+
+                    currentPage++;
+                } while (currentPage <= totalPages);
+
+                _logger?.LogInfo($"成功获取服务器剪贴板项，共 {allItems.Count} 条");
+
+                return new SyncResult
+                {
+                    Success = true,
+                    Message = $"成功获取 {allItems.Count} 条记录",
+                    Items = allItems
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "获取服务器剪贴板项时发生错误");
+                return new SyncResult
+                {
+                    Success = false,
+                    ErrorMessage = $"获取失败: {ex.Message}"
+                };
+            }
+        }
+
+        /// <summary>
+        /// 解析日期时间字符串
+        /// </summary>
+        private DateTime? ParseDateTime(string? dateTimeString)
+        {
+            if (string.IsNullOrEmpty(dateTimeString))
+                return null;
+
+            if (DateTime.TryParse(dateTimeString, out var result))
+                return result;
+
+            return null;
+        }
+
+        /// <summary>
         /// 触发登录状态变化事件
         /// </summary>
         private void OnLoginStateChanged(bool isLoggedIn)

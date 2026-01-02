@@ -14,21 +14,30 @@ namespace PasteList
         private readonly SettingsViewModel _viewModel;
 
         /// <summary>
+        /// 同步完成事件
+        /// </summary>
+        public event EventHandler<int>? SyncCompleted;
+
+        /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="startupService">启动服务</param>
         /// <param name="authService">认证服务</param>
+        /// <param name="historyService">剪贴板历史服务</param>
         /// <param name="logger">日志服务</param>
-        public SettingsWindow(IStartupService startupService, IAuthService authService, ILoggerService? logger)
+        public SettingsWindow(IStartupService startupService, IAuthService authService, IClipboardHistoryService historyService, ILoggerService? logger)
         {
             InitializeComponent();
 
             // 初始化ViewModel
-            _viewModel = new SettingsViewModel(startupService, authService, logger);
+            _viewModel = new SettingsViewModel(startupService, authService, historyService, logger);
             DataContext = _viewModel;
 
             // 订阅清空密码框事件
             _viewModel.PasswordBoxClearRequested += OnPasswordBoxClearRequested;
+
+            // 订阅同步完成事件并转发
+            _viewModel.SyncCompleted += (s, count) => SyncCompleted?.Invoke(this, count);
 
             // 绑定窗口加载事件
             this.Loaded += Window_Loaded;

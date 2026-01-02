@@ -280,6 +280,49 @@ namespace PasteList.Services
         }
 
         /// <summary>
+        /// 批量添加剪贴板项目（自动去重）
+        /// </summary>
+        /// <param name="contents">内容列表</param>
+        /// <returns>实际添加的项目数量</returns>
+        public async Task<int> AddItemsWithDeduplicationAsync(IEnumerable<string> contents)
+        {
+            if (contents == null || !contents.Any())
+                return 0;
+
+            try
+            {
+                // 获取本地已存在的所有内容（用于去重）
+                var existingContents = await _context.ClipboardItems
+                    .Select(x => x.Content)
+                    .ToListAsync();
+
+                var existingContentSet = new HashSet<string>(existingContents);
+
+                // 过滤出不存在的内容
+                var newContents = contents
+                    .Where(c => !string.IsNullOrEmpty(c) && !existingContentSet.Contains(c))
+                    .Distinct() // 同时去除传入列表中的重复项
+                    .ToList();
+
+                if (newContents.Count == 0)
+                    return 0;
+
+                // 创建新的剪贴板项目
+                var newItems = newContents.Select(c => new ClipboardItem(c)).ToList();
+
+                // 批量添加
+                await _context.ClipboardItems.AddRangeAsync(newItems);
+                await _context.SaveChangesAsync();
+
+                return newItems.Count;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"批量添加剪贴板项目失败: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
         /// 释放资源
         /// </summary>
         public void Dispose()
