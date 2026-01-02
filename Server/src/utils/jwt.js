@@ -1,14 +1,12 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../config/config.js';
 
-export const generateAccessToken = (userId, rememberMe = false) => {
-  const expiresIn = rememberMe ? config.jwt.accessExpireRemember : config.jwt.accessExpire;
-  return jwt.sign({ userId, type: 'access' }, config.jwt.secret, { expiresIn });
+export const generateAccessToken = (userId) => {
+  return jwt.sign({ userId, type: 'access' }, config.jwt.secret, { expiresIn: config.jwt.accessExpire });
 };
 
-export const generateRefreshToken = (userId, rememberMe = false) => {
-  const expiresIn = rememberMe ? config.jwt.refreshExpireRemember : config.jwt.refreshExpire;
-  return jwt.sign({ userId, type: 'refresh' }, config.jwt.refreshSecret, { expiresIn });
+export const generateRefreshToken = (userId) => {
+  return jwt.sign({ userId, type: 'refresh' }, config.jwt.refreshSecret, { expiresIn: config.jwt.refreshExpire });
 };
 
 export const verifyAccessToken = (token) => {
@@ -35,9 +33,10 @@ export const verifyRefreshToken = (token) => {
   }
 };
 
-export const getTokenExpiration = (rememberMe = false, isRefresh = false) => {
-  if (isRefresh) {
-    return rememberMe ? config.jwt.refreshExpireRemember : config.jwt.refreshExpire;
-  }
-  return rememberMe ? config.jwt.accessExpireRemember : config.jwt.accessExpire;
+export const getAccessTokenExpiration = () => {
+  return config.jwt.accessExpire;
+};
+
+export const getRefreshTokenExpiration = () => {
+  return config.jwt.refreshExpire;
 };

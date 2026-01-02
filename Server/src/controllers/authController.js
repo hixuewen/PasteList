@@ -2,7 +2,7 @@ import { User } from '../models/User.js';
 import { RefreshToken } from '../models/RefreshToken.js';
 import { Device } from '../models/Device.js';
 import { hashPassword, comparePassword, validatePassword, validateUsername, validateEmail } from '../utils/password.js';
-import { generateAccessToken, generateRefreshToken, verifyRefreshToken, getTokenExpiration } from '../utils/jwt.js';
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken, getAccessTokenExpiration, getRefreshTokenExpiration } from '../utils/jwt.js';
 import { successResponse } from '../utils/response.js';
 import { ApiError, errorCodes } from '../utils/errors.js';
 
@@ -54,12 +54,11 @@ export const register = async (req, res, next) => {
     await User.updateLastLogin(userId);
 
     // 生成令牌
-    const rememberMe = false;
-    const accessToken = generateAccessToken(userId, rememberMe);
-    const refreshToken = generateRefreshToken(userId, rememberMe);
+    const accessToken = generateAccessToken(userId);
+    const refreshToken = generateRefreshToken(userId);
 
     // 保存刷新令牌
-    const refreshExpiresAt = new Date(Date.now() + getTokenExpiration(rememberMe, true) * 1000);
+    const refreshExpiresAt = new Date(Date.now() + getRefreshTokenExpiration() * 1000);
     await RefreshToken.create(userId, refreshToken, refreshExpiresAt);
 
     // 注册设备
@@ -72,7 +71,7 @@ export const register = async (req, res, next) => {
       token: {
         accessToken,
         refreshToken,
-        expiresIn: getTokenExpiration(rememberMe, false),
+        expiresIn: getAccessTokenExpiration(),
         tokenType: 'Bearer'
       }
     }, '注册成功', 201);
@@ -83,7 +82,7 @@ export const register = async (req, res, next) => {
 
 export const login = async (req, res, next) => {
   try {
-    const { username, password, deviceId, rememberMe = false } = req.body;
+    const { username, password, deviceId } = req.body;
 
     // 查找用户
     const user = await User.findByUsernameOrEmail(username);
@@ -102,11 +101,11 @@ export const login = async (req, res, next) => {
     const updatedUser = await User.findById(user.id);
 
     // 生成令牌
-    const accessToken = generateAccessToken(user.id, rememberMe);
-    const refreshToken = generateRefreshToken(user.id, rememberMe);
+    const accessToken = generateAccessToken(user.id);
+    const refreshToken = generateRefreshToken(user.id);
 
     // 保存刷新令牌
-    const refreshExpiresAt = new Date(Date.now() + getTokenExpiration(rememberMe, true) * 1000);
+    const refreshExpiresAt = new Date(Date.now() + getRefreshTokenExpiration() * 1000);
     await RefreshToken.create(user.id, refreshToken, refreshExpiresAt);
 
     // 更新设备信息
@@ -119,7 +118,7 @@ export const login = async (req, res, next) => {
       token: {
         accessToken,
         refreshToken,
-        expiresIn: getTokenExpiration(rememberMe, false),
+        expiresIn: getAccessTokenExpiration(),
         tokenType: 'Bearer'
       }
     }, '登录成功');
@@ -149,19 +148,18 @@ export const refresh = async (req, res, next) => {
     }
 
     // 生成新令牌
-    const rememberMe = false;
-    const newAccessToken = generateAccessToken(decoded.userId, rememberMe);
-    const newRefreshToken = generateRefreshToken(decoded.userId, rememberMe);
+    const newAccessToken = generateAccessToken(decoded.userId);
+    const newRefreshToken = generateRefreshToken(decoded.userId);
 
     // 删除旧令牌，保存新令牌
     await RefreshToken.delete(refreshToken);
-    const refreshExpiresAt = new Date(Date.now() + getTokenExpiration(rememberMe, true) * 1000);
+    const refreshExpiresAt = new Date(Date.now() + getRefreshTokenExpiration() * 1000);
     await RefreshToken.create(decoded.userId, newRefreshToken, refreshExpiresAt);
 
     successResponse(res, {
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
-      expiresIn: getTokenExpiration(rememberMe, false),
+      expiresIn: getAccessTokenExpiration(),
       tokenType: 'Bearer'
     }, '令牌刷新成功');
   } catch (error) {

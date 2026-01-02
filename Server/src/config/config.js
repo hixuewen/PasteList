@@ -20,10 +20,8 @@ export const config = {
   jwt: {
     secret: process.env.JWT_SECRET || 'your_jwt_secret',
     refreshSecret: process.env.JWT_REFRESH_SECRET || 'your_jwt_refresh_secret',
-    accessExpire: parseInt(process.env.JWT_ACCESS_EXPIRE) || 3600,
-    accessExpireRemember: parseInt(process.env.JWT_ACCESS_EXPIRE_REMEMBER) || 86400,
-    refreshExpire: parseInt(process.env.JWT_REFRESH_EXPIRE) || 604800,
-    refreshExpireRemember: parseInt(process.env.JWT_REFRESH_EXPIRE_REMEMBER) || 2592000
+    accessExpire: parseInt(process.env.JWT_ACCESS_EXPIRE) || 86400,      // 24小时
+    refreshExpire: parseInt(process.env.JWT_REFRESH_EXPIRE) || 2592000   // 30天
   },
   
   cors: {

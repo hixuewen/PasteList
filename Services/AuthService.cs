@@ -133,8 +133,7 @@ namespace PasteList.Services
                 {
                     username = usernameOrEmail,
                     password,
-                    deviceId = GetDeviceId(),
-                    rememberMe = true
+                    deviceId = GetDeviceId()
                 };
 
                 var response = await PostAsync("/auth/login", requestBody);
