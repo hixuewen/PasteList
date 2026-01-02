@@ -17,10 +17,16 @@ export const createItem = async (req, res, next) => {
       await Device.updateLastActive(userId, deviceId);
     }
 
-    const itemId = await ClipboardItem.create(userId, deviceId, content, createdAt);
-    const item = await ClipboardItem.findById(itemId, userId);
+    const result = await ClipboardItem.create(userId, deviceId, content, createdAt);
+    const item = await ClipboardItem.findById(result.id, userId);
 
-    successResponse(res, ClipboardItem.toPublic(item), '剪贴板项创建成功', 201);
+    if (result.isExisting) {
+      // 内容已存在，返回已有记录
+      successResponse(res, ClipboardItem.toPublic(item), '内容已存在，返回已有记录', 200);
+    } else {
+      // 新创建的记录
+      successResponse(res, ClipboardItem.toPublic(item), '剪贴板项创建成功', 201);
+    }
   } catch (error) {
     next(error);
   }
@@ -36,14 +42,22 @@ export const createBatch = async (req, res, next) => {
     }
 
     const createdItems = [];
+    const skippedItems = [];
     let failed = 0;
 
     for (const item of items) {
       try {
         const { content, deviceId, createdAt } = item;
-        const itemId = await ClipboardItem.create(userId, deviceId, content, createdAt);
-        const createdItem = await ClipboardItem.findById(itemId, userId);
-        createdItems.push(ClipboardItem.toPublic(createdItem));
+        const result = await ClipboardItem.create(userId, deviceId, content, createdAt);
+        const createdItem = await ClipboardItem.findById(result.id, userId);
+        
+        if (result.isExisting) {
+          // 内容已存在，跳过
+          skippedItems.push(ClipboardItem.toPublic(createdItem));
+        } else {
+          // 新创建
+          createdItems.push(ClipboardItem.toPublic(createdItem));
+        }
       } catch (error) {
         failed++;
       }
@@ -51,8 +65,10 @@ export const createBatch = async (req, res, next) => {
 
     successResponse(res, {
       created: createdItems.length,
+      skipped: skippedItems.length,
       failed,
-      items: createdItems
+      items: createdItems,
+      existingItems: skippedItems
     }, '批量上传成功', 201);
   } catch (error) {
     next(error);
@@ -163,11 +179,12 @@ export const syncItems = async (req, res, next) => {
     for (const localItem of localItems) {
       try {
         const { localId, content, createdAt } = localItem;
-        const itemId = await ClipboardItem.create(userId, deviceId, content, createdAt);
+        const result = await ClipboardItem.create(userId, deviceId, content, createdAt);
         uploaded.push({
           localId,
-          serverId: itemId,
-          success: true
+          serverId: result.id,
+          success: true,
+          isExisting: result.isExisting
         });
       } catch (error) {
         uploaded.push({

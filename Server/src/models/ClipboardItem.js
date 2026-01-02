@@ -1,7 +1,23 @@
 import { query, queryOne } from '../config/database.js';
 
 export const ClipboardItem = {
+  // 检查用户是否已存在相同内容的记录
+  async existsByContent(userId, content) {
+    const existing = await queryOne(
+      'SELECT id FROM clipboard_items WHERE user_id = ? AND content = ?',
+      [userId, content]
+    );
+    return existing ? existing.id : null;
+  },
+
   async create(userId, deviceId, content, createdAt = null) {
+    // 检查是否已存在相同内容
+    const existingId = await ClipboardItem.existsByContent(userId, content);
+    if (existingId) {
+      // 如果已存在，返回已有记录的 ID
+      return { id: existingId, isExisting: true };
+    }
+
     // 将 ISO 8601 格式的时间字符串转换为 Date 对象
     const timestamp = createdAt ? new Date(createdAt) : new Date();
     const result = await query(
@@ -9,7 +25,7 @@ export const ClipboardItem = {
        VALUES (?, ?, ?, ?)`,
       [userId, deviceId, content, timestamp]
     );
-    return result.insertId;
+    return { id: result.insertId, isExisting: false };
   },
 
   async findById(id, userId) {
