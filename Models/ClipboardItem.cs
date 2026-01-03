@@ -23,8 +23,6 @@ namespace PasteList.Models
         [Column("content")]
         public string Content { get; set; } = string.Empty;
         
-
-        
         /// <summary>
         /// 构造函数
         /// </summary>

@@ -15,7 +15,7 @@ namespace PasteList.Services
         private readonly string _logDirectory;
         private string _logFilePath;
         private readonly ConcurrentQueue<LogEntry> _logQueue;
-        private readonly Timer _flushTimer;
+        private readonly System.Threading.Timer _flushTimer;
         private readonly SemaphoreSlim _semaphore;
         private readonly object _lockObject = new object();
         private readonly LoggingConfiguration _config;
@@ -51,9 +51,9 @@ namespace PasteList.Services
             _config = LoggingConfiguration.LoadFromFile();
 
             // 设置日志目录到程序所在目录
-            string assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            string assemblyDirectory = Path.GetDirectoryName(assemblyLocation);
-            _logDirectory = Path.Combine(assemblyDirectory, "Logs");
+            string? assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string? assemblyDirectory = Path.GetDirectoryName(assemblyLocation);
+            _logDirectory = Path.Combine(assemblyDirectory ?? ".", "Logs");
 
             // 确保日志目录存在
             Directory.CreateDirectory(_logDirectory);
@@ -69,7 +69,7 @@ namespace PasteList.Services
             _semaphore = new SemaphoreSlim(1, 1);
 
             // 设置定时刷新器（每5分钟刷新一次，作为备用机制）
-            _flushTimer = new Timer(async _ => await FlushAsync(), null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+            _flushTimer = new System.Threading.Timer(async _ => await FlushAsync(), null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
 
             // 记录日志服务启动
             LogInfo($"日志服务已启动，最小日志级别: {_config.MinimumLevel}");
@@ -84,9 +84,9 @@ namespace PasteList.Services
             _config = config ?? throw new ArgumentNullException(nameof(config));
 
             // 设置日志目录到程序所在目录
-            string assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
-            string assemblyDirectory = Path.GetDirectoryName(assemblyLocation);
-            _logDirectory = Path.Combine(assemblyDirectory, "Logs");
+            string? assemblyLocation = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string? assemblyDirectory = Path.GetDirectoryName(assemblyLocation);
+            _logDirectory = Path.Combine(assemblyDirectory ?? ".", "Logs");
 
             // 确保日志目录存在
             Directory.CreateDirectory(_logDirectory);
@@ -102,7 +102,7 @@ namespace PasteList.Services
             _semaphore = new SemaphoreSlim(1, 1);
 
             // 设置定时刷新器（每5分钟刷新一次，作为备用机制）
-            _flushTimer = new Timer(async _ => await FlushAsync(), null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+            _flushTimer = new System.Threading.Timer(async _ => await FlushAsync(), null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
 
             // 记录日志服务启动
             LogInfo($"日志服务已启动，最小日志级别: {_config.MinimumLevel}");

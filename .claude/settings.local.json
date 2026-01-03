@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(cls:*)",
+      "Bash(clear:*)",
+      "Bash(taskkill:*)",
+      "Bash(git commit:*)",
+      "Bash(tree:*)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(tasklist)",
+      "Bash(tskill 6208)",
+      "Bash(openspec:*)",
+      "Bash(mkdir:*)",
+      "Bash(lsof:*)",
+      "Bash(netstat:*)",
+      "Bash(tasklist:*)",
+      "Bash(nul:*)",
+      "Bash(npm rebuild:*)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "outputStyle": "Explanatory"
+}

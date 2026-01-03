@@ -13,8 +13,8 @@ namespace PasteList.Data
         /// <summary>
         /// 剪贴板项目数据集
         /// </summary>
-        public DbSet<ClipboardItem> ClipboardItems { get; set; }
-        
+        public DbSet<ClipboardItem> ClipboardItems { get; set; } = null!;
+
         /// <summary>
         /// 构造函数
         /// </summary>
@@ -67,7 +67,7 @@ namespace PasteList.Data
             {
                 // 设置主键
                 entity.HasKey(e => e.Id);
-                
+
                 // 配置属性
                 entity.Property(e => e.Content)
                     .IsRequired()

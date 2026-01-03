@@ -90,5 +90,12 @@ namespace PasteList.Services
         /// <param name="content">内容</param>
         /// <returns>如果存在则返回项目，否则返回null</returns>
         Task<ClipboardItem?> FindDuplicateAsync(string content);
+
+        /// <summary>
+        /// 批量添加剪贴板项目（自动去重）
+        /// </summary>
+        /// <param name="contents">内容列表</param>
+        /// <returns>实际添加的项目数量</returns>
+        Task<int> AddItemsWithDeduplicationAsync(IEnumerable<string> contents);
     }
 }

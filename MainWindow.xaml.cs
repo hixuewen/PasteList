@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -15,7 +16,9 @@ using System.Windows.Shapes;
 using PasteList.ViewModels;
 using PasteList.Services;
 using PasteList.Data;
+using PasteList.Models;
 using System.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 
 namespace PasteList
 {
@@ -99,12 +102,14 @@ namespace PasteList
         
         #endregion
         
-        private readonly MainWindowViewModel _viewModel;
-        private readonly IClipboardService _clipboardService;
-        private readonly IClipboardHistoryService _historyService;
-        private readonly ClipboardDbContext _dbContext;
-        private readonly IStartupService _startupService;
-        private readonly ILoggerService _logger;
+        private MainWindowViewModel? _viewModel;
+        private IClipboardService? _clipboardService;
+        private IClipboardHistoryService? _historyService;
+        private ClipboardDbContext? _dbContext;
+        private IStartupService? _startupService;
+        private IAuthService? _authService;
+        private ISettingsService? _settingsService;
+        private ILoggerService? _logger;
 
         /// <summary>
         /// 初始化MainWindow，设置数据上下文和服务
@@ -116,12 +121,45 @@ namespace PasteList
             // 设置窗口启动时在屏幕中央
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-            // 初始化日志服务
-            _logger = new LoggerService();
-            _logger.LogApplicationStart();
+            // 异步初始化
+            Loaded += MainWindow_Loaded;
+        }
 
+        /// <summary>
+        /// 窗口加载时进行异步初始化
+        /// </summary>
+        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
             try
             {
+                await InitializeAsync();
+
+                // 加载历史记录数据
+                if (_viewModel != null)
+                {
+                    await _viewModel.LoadHistoryAsync();
+                    // 设置初始状态消息
+                    _viewModel.StatusMessage = "应用程序已就绪，按 Alt+Z 可唤起窗口";
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"应用程序初始化失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                Close();
+            }
+        }
+
+        /// <summary>
+        /// 异步初始化应用程序
+        /// </summary>
+        private async Task InitializeAsync()
+        {
+            try
+            {
+                // 初始化日志服务
+                _logger = new LoggerService();
+                _logger.LogApplicationStart();
+
                 // 初始化数据库上下文
                 _dbContext = new ClipboardDbContext();
                 _logger.LogInfo("数据库上下文初始化完成");
@@ -130,25 +168,47 @@ namespace PasteList
                 _dbContext.Database.EnsureCreated();
                 _logger.LogInfo("数据库创建或连接成功");
 
-                // 初始化服务
-                _clipboardService = new ClipboardService(this, _logger);
-                _logger.LogInfo("剪贴板服务初始化完成");
+            // 初始化服务
+            _clipboardService = new ClipboardService(this, _logger);
+            _logger.LogInfo("剪贴板服务初始化完成");
 
-                _historyService = new ClipboardHistoryService(_dbContext);
-                _logger.LogInfo("历史记录服务初始化完成");
+            _historyService = new ClipboardHistoryService(_dbContext);
+            _logger.LogInfo("历史记录服务初始化完成");
 
-                _startupService = new StartupService();
-                _logger.LogInfo("启动服务初始化完成");
+            _startupService = new StartupService();
+            _logger.LogInfo("启动服务初始化完成");
 
-                // 初始化ViewModel
-                _viewModel = new MainWindowViewModel(_clipboardService, _historyService, _logger);
-                _logger.LogInfo("ViewModel初始化完成");
+            // 初始化设置服务（需要在认证服务之前，因为认证服务需要读取服务器地址）
+            _settingsService = new SettingsService(_logger);
+            await _settingsService.LoadAsync();
+            _logger.LogInfo("设置服务初始化完成");
+
+            // 初始化认证服务
+            _authService = new AuthService(_settingsService, _logger);
+            _logger.LogInfo("认证服务初始化完成");
+
+            // 尝试自动登录（使用保存的凭证）
+            try
+            {
+                var autoLoginSuccess = await _authService.TryAutoLoginAsync();
+                if (autoLoginSuccess)
+                {
+                    _logger.LogInfo("自动登录成功");
+                }
+                else
+                {
+                    _logger.LogDebug("自动登录失败或没有保存的凭证");
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "应用程序初始化过程中发生错误");
-                throw;
+                _logger.LogError(ex, "自动登录初始化失败");
+                // 不阻断应用启动，继续运行
             }
+
+            // 初始化ViewModel
+            _viewModel = new MainWindowViewModel(_clipboardService, _historyService, _logger, _authService, _settingsService);
+            _logger.LogInfo("ViewModel初始化完成");
 
             // 设置数据上下文
             DataContext = _viewModel;
@@ -168,51 +228,33 @@ namespace PasteList
             }
             catch (Exception ex)
             {
-                // 如果图标创建失败，记录错误但不阻止应用启动
-                System.Diagnostics.Debug.WriteLine($"无法设置托盘图标: {ex.Message}");
+                _logger.LogError(ex, "托盘图标创建失败");
             }
 
-            // 窗口加载完成后初始化ViewModel
-            Loaded += MainWindow_Loaded;
+            // 注册全局热键
+            RegisterGlobalHotKey();
+
+            _logger.LogInfo("MainWindow 初始化完成");
         }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "MainWindow 初始化过程中发生错误");
+            MessageBox.Show($"应用程序初始化失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            Close();
+        }
+    }
         
 
 
-        /// <summary>
-        /// 窗口加载完成事件处理
-        /// 初始化ViewModel的数据加载和注册全局快捷键
-        /// </summary>
-        /// <param name="sender">事件发送者</param>
-        /// <param name="e">事件参数</param>
-        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                // 加载历史记录数据
-                await _viewModel.LoadHistoryAsync();
-
-                // 初始化开机启动菜单状态
-                InitializeStartupMenu();
-
-                // 热键注册已在 OnSourceInitialized 中处理
-
-                // 设置初始状态消息
-                _viewModel.StatusMessage = "应用程序已就绪，按 Alt+Z 可唤起窗口";
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"加载数据时发生错误: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-      
+        
+  
         /// <summary>
         /// 窗口关闭事件处理
         /// 如果不是真正关闭，则最小化到托盘；否则清理资源
         /// </summary>
         /// <param name="sender">事件发送者</param>
         /// <param name="e">事件参数</param>
-        private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
             if (!_isClosing)
             {
@@ -220,36 +262,36 @@ namespace PasteList
                 e.Cancel = true;
                 WindowState = WindowState.Minimized;
                 Hide();
-                _logger.LogUserAction("窗口最小化到托盘");
+                _logger?.LogUserAction("窗口最小化到托盘");
                 return;
             }
 
             try
             {
-                _logger.LogInfo("开始清理应用程序资源");
+                _logger?.LogInfo("开始清理应用程序资源");
 
                 // 注销全局快捷键
                 UnregisterGlobalHotKey();
-                _logger.LogDebug("全局快捷键已注销");
+                _logger?.LogDebug("全局快捷键已注销");
 
                 // 停止剪贴板监听
                 if (_clipboardService != null)
                 {
                     _clipboardService.StopListening();
-                    _logger.LogDebug("剪贴板监听已停止");
+                    _logger?.LogDebug("剪贴板监听已停止");
                 }
 
                 // 释放ViewModel资源
                 _viewModel?.Dispose();
-                _logger.LogDebug("ViewModel资源已释放");
+                _logger?.LogDebug("ViewModel资源已释放");
 
                 // 释放历史服务资源
                 _historyService?.Dispose();
-                _logger.LogDebug("历史记录服务资源已释放");
+                _logger?.LogDebug("历史记录服务资源已释放");
 
                 // 释放数据库上下文资源
                 _dbContext?.Dispose();
-                _logger.LogDebug("数据库上下文资源已释放");
+                _logger?.LogDebug("数据库上下文资源已释放");
 
                 // 释放日志服务
                 _logger?.LogApplicationShutdown();
@@ -272,7 +314,7 @@ namespace PasteList
         /// </summary>
         /// <param name="sender">事件发送者</param>
         /// <param name="e">事件参数</param>
-        private void MainWindow_StateChanged(object sender, EventArgs e)
+        private void MainWindow_StateChanged(object? sender, EventArgs e)
         {
             if (WindowState == WindowState.Minimized)
             {
@@ -336,7 +378,7 @@ namespace PasteList
         private void ListView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             // 确保有选中项且命令可执行
-            if (_viewModel.SelectedItem != null && _viewModel.DoubleClickItemCommand.CanExecute(null))
+            if (_viewModel?.SelectedItem != null && _viewModel.DoubleClickItemCommand.CanExecute(null))
             {
                 _viewModel.DoubleClickItemCommand.Execute(null);
             }
@@ -537,6 +579,66 @@ namespace PasteList
         }
 
         /// <summary>
+        /// 处理"设置"菜单项点击事件
+        /// </summary>
+        /// <param name="sender">事件发送者</param>
+        /// <param name="e">事件参数</param>
+        private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _logger?.LogUserAction("点击托盘菜单 - 设置");
+
+                if (_startupService == null)
+                {
+                    MessageBox.Show("启动服务未初始化，无法打开设置", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                if (_authService == null)
+                {
+                    MessageBox.Show("认证服务未初始化，无法打开设置", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                if (_historyService == null)
+                {
+                    MessageBox.Show("历史记录服务未初始化，无法打开设置", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                if (_settingsService == null)
+                {
+                    MessageBox.Show("设置服务未初始化，无法打开设置", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                // 创建设置窗口
+                var settingsWindow = new SettingsWindow(_startupService, _authService, _historyService, _settingsService, _logger);
+                settingsWindow.Owner = this;
+
+                // 订阅同步完成事件，刷新主窗口列表
+                settingsWindow.SyncCompleted += async (s, addedCount) =>
+                {
+                    if (_viewModel != null && addedCount > 0)
+                    {
+                        await _viewModel.LoadHistoryAsync();
+                        _viewModel.StatusMessage = $"同步完成，新增 {addedCount} 条记录";
+                    }
+                };
+
+                // 显示设置窗口（模态对话框）
+                settingsWindow.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "打开设置窗口时发生错误");
+                System.Diagnostics.Debug.WriteLine($"打开设置窗口时发生错误: {ex.Message}");
+                MessageBox.Show($"打开设置窗口失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        /// <summary>
         /// 处理"退出"菜单项点击事件
         /// </summary>
         /// <param name="sender">事件发送者</param>
@@ -557,63 +659,9 @@ namespace PasteList
             _logger?.LogUserAction("双击托盘图标");
             RestoreWindow();
         }
-        
+
         #endregion
-        
-        #region 开机启动功能
-        
-        /// <summary>
-        /// 初始化开机启动菜单状态
-        /// </summary>
-        private void InitializeStartupMenu()
-        {
-            try
-            {
-                // 检查当前开机启动状态并更新菜单项
-                bool isEnabled = _startupService.IsStartupEnabled();
-                StartupMenuItem.IsChecked = isEnabled;
-                _logger?.LogInfo($"开机启动状态初始化完成，当前状态: {(isEnabled ? "已启用" : "已禁用")}");
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "初始化开机启动菜单时发生错误");
-                System.Diagnostics.Debug.WriteLine($"初始化开机启动菜单时发生错误: {ex.Message}");
-            }
-        }
 
-        /// <summary>
-        /// 处理"开机启动"菜单项点击事件
-        /// </summary>
-        /// <param name="sender">事件发送者</param>
-        /// <param name="e">事件参数</param>
-        private void StartupMenuItem_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                // 切换开机启动状态
-                bool oldState = _startupService.IsStartupEnabled();
-                _startupService.ToggleStartup();
-                bool newState = _startupService.IsStartupEnabled();
-
-                // 更新菜单项状态
-                StartupMenuItem.IsChecked = newState;
-
-                // 显示状态消息
-                string statusMessage = newState ? "已启用开机启动" : "已禁用开机启动";
-                _viewModel.StatusMessage = statusMessage;
-
-                _logger?.LogUserAction($"切换开机启动状态", $"从{(oldState ? "已启用" : "已禁用")}变更为{(newState ? "已启用" : "已禁用")}");
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "切换开机启动状态时发生错误");
-                System.Diagnostics.Debug.WriteLine($"切换开机启动状态时发生错误: {ex.Message}");
-                MessageBox.Show($"操作失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-        
-        #endregion
-        
         #region 图标处理
         
         /// <summary>

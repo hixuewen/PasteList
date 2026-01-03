@@ -18,12 +18,14 @@ namespace PasteList.ViewModels
     /// </summary>
     public class MainWindowViewModel : INotifyPropertyChanged, IDisposable
     {
-        private readonly IClipboardService _clipboardService;
-        private readonly IClipboardHistoryService _historyService;
-        private readonly ILoggerService _logger;
+        private readonly IClipboardService _clipboardService = null!;
+        private readonly IClipboardHistoryService _historyService = null!;
+        private readonly IAuthService? _authService;
+        private readonly ISettingsService? _settingsService;
+        private readonly ILoggerService? _logger;
         private bool _disposed = false;
         
-        private ObservableCollection<ClipboardItem> _clipboardItems;
+        private ObservableCollection<ClipboardItem> _clipboardItems = null!;
         private ClipboardItem? _selectedItem;
         private string _searchText = string.Empty;
         private bool _isListening = false;
@@ -54,11 +56,15 @@ namespace PasteList.ViewModels
         /// <param name="clipboardService">剪贴板服务</param>
         /// <param name="historyService">历史记录服务</param>
         /// <param name="logger">日志服务</param>
-        public MainWindowViewModel(IClipboardService clipboardService, IClipboardHistoryService historyService, ILoggerService logger = null)
+        /// <param name="authService">认证服务</param>
+        /// <param name="settingsService">设置服务</param>
+        public MainWindowViewModel(IClipboardService clipboardService, IClipboardHistoryService historyService, ILoggerService? logger = null, IAuthService? authService = null, ISettingsService? settingsService = null)
         {
             _clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
             _historyService = historyService ?? throw new ArgumentNullException(nameof(historyService));
             _logger = logger;
+            _authService = authService;
+            _settingsService = settingsService;
             _clipboardItems = new ObservableCollection<ClipboardItem>();
 
             InitializeCommands();
@@ -99,6 +105,7 @@ namespace PasteList.ViewModels
                 // 更新相关命令的可执行状态
                 ((RelayCommand)DoubleClickItemCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)DeleteItemCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)UploadItemCommand).RaiseCanExecuteChanged();
             }
         }
         
@@ -168,22 +175,27 @@ namespace PasteList.ViewModels
         /// <summary>
         /// 开始监听命令
         /// </summary>
-        public ICommand StartListeningCommand { get; private set; }
+        public ICommand StartListeningCommand { get; private set; } = null!;
         
         /// <summary>
         /// 停止监听命令
         /// </summary>
-        public ICommand StopListeningCommand { get; private set; }
+        public ICommand StopListeningCommand { get; private set; } = null!;
         
         /// <summary>
         /// 双击项目命令
         /// </summary>
-        public ICommand DoubleClickItemCommand { get; private set; }
+        public ICommand DoubleClickItemCommand { get; private set; } = null!;
         
         /// <summary>
         /// 删除项目命令
         /// </summary>
-        public ICommand DeleteItemCommand { get; private set; }
+        public ICommand DeleteItemCommand { get; private set; } = null!;
+
+        /// <summary>
+        /// 上传项目命令
+        /// </summary>
+        public ICommand UploadItemCommand { get; private set; } = null!;
         
         #endregion
 
@@ -218,9 +230,15 @@ namespace PasteList.ViewModels
                 string deleteContentPreview = FormatContentForLog(SelectedItem.Content, GetContentType(SelectedItem.Content));
                 _logger?.LogUserAction("尝试删除记录", $"ID: {SelectedItem.Id}, 内容: {deleteContentPreview}");
 
+                // 根据是否已登录显示不同的确认信息
+                bool willSyncDelete = _authService != null && _authService.IsLoggedIn;
+                string confirmMessage = willSyncDelete
+                    ? $"确定要删除这条记录吗？\n（将同时删除服务器上的记录）\n\n内容预览：{contentPreview}"
+                    : $"确定要删除这条记录吗？\n\n内容预览：{contentPreview}";
+
                 // 显示确认对话框
                 var result = MessageBox.Show(
-                    $"确定要删除这条记录吗？\n\n内容预览：{contentPreview}",
+                    confirmMessage,
                     "删除确认",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question,
@@ -229,10 +247,45 @@ namespace PasteList.ViewModels
 
                 if (result == MessageBoxResult.Yes)
                 {
-                    // 在清空SelectedItem之前保存ID
+                    // 在清空SelectedItem之前保存ID和内容
                     int itemId = SelectedItem.Id;
+                    string itemContent = SelectedItem.Content;
+                    bool serverDeleteSuccess = false;
 
-                    // 执行删除操作
+                    // 如果已登录，先根据内容查找并删除服务器上的记录
+                    if (_authService != null && _authService.IsLoggedIn)
+                    {
+                        StatusMessage = "正在删除服务器记录...";
+                        var serverDeleteResult = await _authService.DeleteClipboardItemByContentAsync(itemContent);
+                        
+                        if (serverDeleteResult.Success)
+                        {
+                            serverDeleteSuccess = true;
+                            _logger?.LogInfo($"服务器记录删除成功");
+                        }
+                        else
+                        {
+                            // 服务器删除失败，询问是否继续删除本地记录
+                            _logger?.LogWarning($"服务器记录删除失败: {serverDeleteResult.ErrorMessage}");
+                            var continueResult = MessageBox.Show(
+                                $"服务器记录删除失败: {serverDeleteResult.ErrorMessage}\n\n是否继续删除本地记录？",
+                                "警告",
+                                MessageBoxButton.YesNo,
+                                MessageBoxImage.Warning,
+                                MessageBoxResult.No
+                            );
+                            
+                            if (continueResult != MessageBoxResult.Yes)
+                            {
+                                StatusMessage = "删除已取消";
+                                return;
+                            }
+                        }
+                    }
+
+                    StatusMessage = "正在删除本地记录...";
+
+                    // 执行本地删除操作
                     var success = await _historyService.DeleteItemAsync(itemId);
 
                     if (success)
@@ -246,8 +299,11 @@ namespace PasteList.ViewModels
                         // 清空选中项
                         SelectedItem = null;
 
-                        StatusMessage = "记录已删除";
-                        _logger?.LogInfo($"记录删除成功，ID: {itemId}, 内容: {deleteContentPreview}");
+                        StatusMessage = serverDeleteSuccess ? "记录已同步删除" : "记录已删除";
+                        _logger?.LogInfo($"记录删除成功，ID: {itemId}, 同步删除: {serverDeleteSuccess}, 内容: {deleteContentPreview}");
+
+                        // 如果启用了同步，触发从服务器同步
+                        await SyncFromServerAsync();
                     }
                     else
                     {
@@ -272,6 +328,75 @@ namespace PasteList.ViewModels
             {
                 stopwatch.Stop();
                 _logger?.LogPerformance("删除记录操作", stopwatch.ElapsedMilliseconds);
+            }
+        }
+
+        /// <summary>
+        /// 处理上传历史记录项事件
+        /// </summary>
+        private async Task OnUploadItem()
+        {
+            if (SelectedItem == null)
+            {
+                _logger?.LogWarning("尝试上传项目但SelectedItem为null");
+                return;
+            }
+
+            if (_authService == null)
+            {
+                MessageBox.Show("认证服务未初始化", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            if (!_authService.IsLoggedIn)
+            {
+                MessageBox.Show("请先登录后再上传", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            try
+            {
+                string contentPreview = SelectedItem.Content.Length > 50
+                    ? SelectedItem.Content.Substring(0, 50) + "..."
+                    : SelectedItem.Content;
+
+                // 格式化上传内容用于日志记录
+                string uploadContentPreview = FormatContentForLog(SelectedItem.Content, GetContentType(SelectedItem.Content));
+                _logger?.LogUserAction("尝试上传记录", $"ID: {SelectedItem.Id}, 内容: {uploadContentPreview}");
+
+                StatusMessage = "正在上传...";
+
+                // 执行上传操作
+                var result = await _authService.UploadClipboardItemAsync(SelectedItem.Content);
+
+                if (result.Success)
+                {
+                    StatusMessage = "上传成功";
+                    _logger?.LogInfo($"记录上传成功，ID: {SelectedItem.Id}, 内容: {uploadContentPreview}");
+                    MessageBox.Show("上传成功", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                    // 如果启用了同步，触发从服务器同步
+                    await SyncFromServerAsync();
+                }
+                else
+                {
+                    StatusMessage = $"上传失败: {result.ErrorMessage}";
+                    _logger?.LogError($"记录上传失败，ID: {SelectedItem.Id}, 错误: {result.ErrorMessage}");
+                    MessageBox.Show($"上传失败: {result.ErrorMessage}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "上传记录时发生错误");
+                StatusMessage = $"上传失败: {ex.Message}";
+                MessageBox.Show($"上传记录时发生错误: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                stopwatch.Stop();
+                _logger?.LogPerformance("上传记录操作", stopwatch.ElapsedMilliseconds);
             }
         }
 
@@ -414,13 +539,15 @@ namespace PasteList.ViewModels
             try
             {
                 INPUT[] inputs = new INPUT[4];
+#pragma warning disable CS8602 // 解引用可能出现空引用 (GetMessageExtraInfo 不会返回 null)
                 var extraInfo = GetMessageExtraInfo();
+#pragma warning restore CS8602
 
                 // Press Ctrl, V, Release V, Release Ctrl
                 inputs[0] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = 0, dwExtraInfo = extraInfo } } };
-            inputs[1] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_V, dwFlags = 0, dwExtraInfo = extraInfo } } };
-            inputs[2] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_V, dwFlags = KEYEVENTF_KEYUP, dwExtraInfo = extraInfo } } };
-            inputs[3] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP, dwExtraInfo = extraInfo } } };
+                inputs[1] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_V, dwFlags = 0, dwExtraInfo = extraInfo } } };
+                inputs[2] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_V, dwFlags = KEYEVENTF_KEYUP, dwExtraInfo = extraInfo } } };
+                inputs[3] = new INPUT { type = INPUT_KEYBOARD, u = new INPUTUNION { ki = new KEYBDINPUT { wVk = VK_CONTROL, dwFlags = KEYEVENTF_KEYUP, dwExtraInfo = extraInfo } } };
 
                 SendInput((uint)inputs.Length, inputs, System.Runtime.InteropServices.Marshal.SizeOf(typeof(INPUT)));
             }
@@ -445,6 +572,9 @@ namespace PasteList.ViewModels
             {
                 // 如果没有记录的窗口，则使用Alt+Tab切换（简化版本）
                 INPUT[] inputs = new INPUT[4];
+#pragma warning disable CS8602 // 解引用可能出现空引用 (GetMessageExtraInfo 不会返回 null)
+                var extraInfo = GetMessageExtraInfo();
+#pragma warning restore CS8602
                 
                 // 按下 Alt 键
                 inputs[0] = new INPUT
@@ -458,7 +588,7 @@ namespace PasteList.ViewModels
                             wScan = 0,
                             dwFlags = 0,
                             time = 0,
-                            dwExtraInfo = GetMessageExtraInfo()
+                            dwExtraInfo = extraInfo
                         }
                     }
                 };
@@ -475,7 +605,7 @@ namespace PasteList.ViewModels
                             wScan = 0,
                             dwFlags = 0,
                             time = 0,
-                            dwExtraInfo = GetMessageExtraInfo()
+                            dwExtraInfo = extraInfo
                         }
                     }
                 };
@@ -492,7 +622,7 @@ namespace PasteList.ViewModels
                             wScan = 0,
                             dwFlags = 2, // KEYEVENTF_KEYUP
                             time = 0,
-                            dwExtraInfo = GetMessageExtraInfo()
+                            dwExtraInfo = extraInfo
                         }
                     }
                 };
@@ -509,7 +639,7 @@ namespace PasteList.ViewModels
                             wScan = 0,
                             dwFlags = 2, // KEYEVENTF_KEYUP
                             time = 0,
-                            dwExtraInfo = GetMessageExtraInfo()
+                            dwExtraInfo = extraInfo
                         }
                     }
                 };
@@ -633,6 +763,11 @@ namespace PasteList.ViewModels
                 executeAsync: async () => await OnDeleteItem(),
                 canExecute: () => SelectedItem != null
             );
+
+            UploadItemCommand = new RelayCommand(
+                executeAsync: async () => await OnUploadItem(),
+                canExecute: () => SelectedItem != null && _authService != null
+            );
         }
         
         /// <summary>
@@ -702,6 +837,9 @@ namespace PasteList.ViewModels
                 });
 
                 _logger?.LogUserAction("剪贴板内容自动添加", $"类型: {contentType}, 长度: {e.ClipboardItem.Content.Length}");
+
+                // 如果启用了同步，触发从服务器同步
+                await SyncFromServerAsync();
             }
             catch (Exception ex)
             {
@@ -721,10 +859,11 @@ namespace PasteList.ViewModels
         /// <summary>
         /// 开始监听剪贴板
         /// </summary>
-        public async Task StartListeningAsync()
+        public Task StartListeningAsync()
         {
             try
             {
+                // 直接在UI线程调用剪贴板服务，确保窗口句柄在正确的线程上下文中获取
                 _clipboardService.StartListening();
                 IsListening = true;
                 StatusMessage = "正在监听剪贴板...";
@@ -733,6 +872,7 @@ namespace PasteList.ViewModels
             {
                 StatusMessage = $"启动监听失败: {ex.Message}";
             }
+            return Task.CompletedTask;
         }
         
         /// <summary>
@@ -742,7 +882,7 @@ namespace PasteList.ViewModels
         {
             try
             {
-                _clipboardService.StopListening();
+                await Task.Run(() => _clipboardService.StopListening());
                 IsListening = false;
                 StatusMessage = "已停止监听剪贴板";
             }
@@ -751,12 +891,6 @@ namespace PasteList.ViewModels
                 StatusMessage = $"停止监听失败: {ex.Message}";
             }
         }
-        
-
-        
-
-        
-
         
         /// <summary>
         /// 加载历史记录
@@ -776,8 +910,6 @@ namespace PasteList.ViewModels
                 
                 TotalCount = totalCount;
                 StatusMessage = $"已加载 {items.Count} 个项目";
-                
-
             }
             catch (Exception ex)
             {
@@ -811,6 +943,70 @@ namespace PasteList.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"搜索失败: {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// 从服务器同步数据到本地
+        /// </summary>
+        private async Task SyncFromServerAsync()
+        {
+            try
+            {
+                // 检查是否启用同步
+                if (_settingsService == null || !_settingsService.IsSyncEnabled)
+                {
+                    return;
+                }
+
+                // 检查是否已登录
+                if (_authService == null || !_authService.IsLoggedIn)
+                {
+                    return;
+                }
+
+                _logger?.LogUserAction("触发同步", "从服务器获取数据");
+                StatusMessage = "正在同步...";
+
+                // 从服务器获取所有剪贴板项
+                var syncResult = await _authService.GetAllClipboardItemsAsync();
+
+                if (!syncResult.Success)
+                {
+                    _logger?.LogWarning($"同步失败: {syncResult.ErrorMessage}");
+                    StatusMessage = $"同步失败: {syncResult.ErrorMessage}";
+                    return;
+                }
+
+                if (syncResult.Items.Count == 0)
+                {
+                    _logger?.LogInfo("服务器上没有数据需要同步");
+                    return;
+                }
+
+                // 获取所有内容用于批量添加（去重）
+                var contents = syncResult.Items.Select(item => item.Content).ToList();
+
+                // 批量添加到本地数据库（自动去重）
+                var addedCount = await _historyService.AddItemsWithDeduplicationAsync(contents);
+
+                if (addedCount > 0)
+                {
+                    _logger?.LogInfo($"同步成功，新增 {addedCount} 条记录");
+                    
+                    // 刷新列表
+                    await LoadHistoryAsync();
+                    StatusMessage = $"同步完成，新增 {addedCount} 条记录";
+                }
+                else
+                {
+                    _logger?.LogInfo("同步完成，本地数据已是最新");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "同步过程中发生错误");
+                StatusMessage = $"同步失败: {ex.Message}";
             }
         }
         
@@ -856,8 +1052,7 @@ namespace PasteList.ViewModels
                         _clipboardService.StopListening();
                         IsListening = false;
                         StatusMessage = "已停止监听剪贴板";
-
-                        }
+                    }
                     catch (Exception ex)
                     {
                         StatusMessage = $"停止监听失败: {ex.Message}";
@@ -884,79 +1079,5 @@ namespace PasteList.ViewModels
         }
         
         #endregion
-    }
-    
-    /// <summary>
-    /// 简单的命令实现
-    /// </summary>
-    public class RelayCommand : ICommand
-    {
-        private readonly Func<Task> _executeAsync;
-        private readonly Action _execute;
-        private readonly Func<bool> _canExecute;
-        private readonly bool _isAsync;
-        
-        /// <summary>
-        /// 构造函数（同步版本）
-        /// </summary>
-        /// <param name="execute">执行方法</param>
-        /// <param name="canExecute">可执行判断方法</param>
-        public RelayCommand(Action execute, Func<bool>? canExecute = null)
-        {
-            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-            _canExecute = canExecute ?? (() => true);
-            _isAsync = false;
-        }
-        
-        /// <summary>
-        /// 构造函数（异步版本）
-        /// </summary>
-        /// <param name="executeAsync">异步执行方法</param>
-        /// <param name="canExecute">可执行判断方法</param>
-        public RelayCommand(Func<Task> executeAsync, Func<bool>? canExecute = null)
-        {
-            _executeAsync = executeAsync ?? throw new ArgumentNullException(nameof(executeAsync));
-            _canExecute = canExecute ?? (() => true);
-            _isAsync = true;
-        }
-        
-        /// <summary>
-        /// 可执行状态变化事件
-        /// </summary>
-        public event EventHandler? CanExecuteChanged;
-        
-        /// <summary>
-        /// 判断命令是否可执行
-        /// </summary>
-        /// <param name="parameter">参数</param>
-        /// <returns>是否可执行</returns>
-        public bool CanExecute(object? parameter)
-        {
-            return _canExecute();
-        }
-        
-        /// <summary>
-        /// 执行命令
-        /// </summary>
-        /// <param name="parameter">参数</param>
-        public void Execute(object? parameter)
-        {
-            if (_isAsync)
-            {
-                _ = _executeAsync();
-            }
-            else
-            {
-                _execute();
-            }
-        }
-        
-        /// <summary>
-        /// 触发可执行状态变化事件
-        /// </summary>
-        public void RaiseCanExecuteChanged()
-        {
-            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
-        }
     }
 }
