@@ -372,6 +372,15 @@
                                 </Style>
                             </TextBlock.Style>
                         </TextBlock>
+
+                        <!-- 立即同步按钮 -->
+                        <Button Content="立即同步"
+                                Command="{Binding SyncNowCommand}"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Width="80"
+                                HorizontalAlignment="Left"
+                                Margin="10,10,0,0"
+                                IsEnabled="{Binding IsLoggedIn, FallbackValue=False}"/>
                     </StackPanel>
                 </Border>
             </TabItem>

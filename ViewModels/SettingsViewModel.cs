@@ -83,6 +83,11 @@ namespace PasteList.ViewModels
                 canExecute: () => !IsLoading && !IsLoggedIn
             );
 
+            SyncNowCommand = new RelayCommand(
+                executeAsync: SyncNowAsync,
+                canExecute: () => IsLoggedIn
+            );
+
             // 订阅登录状态变化事件
             _authService.LoginStateChanged += OnLoginStateChanged;
 
@@ -408,6 +413,11 @@ namespace PasteList.ViewModels
         /// </summary>
         public ICommand ToggleModeCommand { get; }
 
+        /// <summary>
+        /// 立即同步命令
+        /// </summary>
+        public ICommand SyncNowCommand { get; }
+
         #endregion
 
         /// <summary>
@@ -616,7 +626,7 @@ namespace PasteList.ViewModels
         private void UpdateLoginState()
         {
             IsLoggedIn = _authService.IsLoggedIn;
-            
+
             if (_authService.CurrentUser != null)
             {
                 CurrentUsername = _authService.CurrentUser.Username;
@@ -627,6 +637,8 @@ namespace PasteList.ViewModels
                 CurrentUsername = string.Empty;
                 CurrentEmail = string.Empty;
             }
+
+            ((RelayCommand)SyncNowCommand).RaiseCanExecuteChanged();
         }
 
         /// <summary>
@@ -712,6 +724,14 @@ namespace PasteList.ViewModels
                 SyncStatusMessage = $"同步失败: {ex.Message}";
                 _logger?.LogError(ex, "同步过程中发生错误");
             }
+        }
+
+        /// <summary>
+        /// 立即同步（用户手动触发）
+        /// </summary>
+        private async Task SyncNowAsync()
+        {
+            await SyncFromServerAsync();
         }
 
         /// <summary>
