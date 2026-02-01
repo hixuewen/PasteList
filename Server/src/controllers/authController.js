@@ -47,7 +47,7 @@ export const register = async (req, res, next) => {
 
     // 创建用户
     const passwordHash = await hashPassword(password);
-    const userId = await User.create(username, email, passwordHash);
+    const userId = await User.create(username, email, passwordHash, 0);
 
     // 获取完整用户信息
     const user = await User.findById(userId);
