@@ -1,10 +1,10 @@
 import { query, queryOne } from '../config/database.js';
 
 export const User = {
-  async create(username, email, passwordHash) {
+  async create(username, email, passwordHash, vipLevel = 0) {
     const result = await query(
-      'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
-      [username, email, passwordHash]
+      'INSERT INTO users (username, email, password_hash, vip_level) VALUES (?, ?, ?, ?)',
+      [username, email, passwordHash, vipLevel]
     );
     return result.insertId;
   },
@@ -47,6 +47,7 @@ export const User = {
       id: publicUser.id,
       username: publicUser.username,
       email: publicUser.email,
+      vipLevel: publicUser.vip_level,
       createdAt: publicUser.created_at,
       updatedAt: publicUser.updated_at,
       lastLoginAt: publicUser.last_login_at
