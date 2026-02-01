@@ -60,6 +60,11 @@ namespace PasteList.Services
         public string Email { get; set; } = string.Empty;
 
         /// <summary>
+        /// 会员等级
+        /// </summary>
+        public int VipLevel { get; set; }
+
+        /// <summary>
         /// 创建时间
         /// </summary>
         public DateTime CreatedAt { get; set; }
