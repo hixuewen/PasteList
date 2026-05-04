@@ -409,7 +409,7 @@ namespace PasteList.ViewModels
         /// <summary>
         /// 处理编辑历史记录项事件
         /// </summary>
-        private void OnEditItem()
+        private async Task OnEditItem()
         {
             if (SelectedItem == null)
             {
@@ -451,7 +451,7 @@ namespace PasteList.ViewModels
                     Id = SelectedItem.Id
                 };
 
-                var success = _historyService.UpdateItemAsync(updatedItem).Result;
+                var success = await _historyService.UpdateItemAsync(updatedItem);
 
                 if (success)
                 {
@@ -855,7 +855,7 @@ namespace PasteList.ViewModels
             );
 
             EditItemCommand = new RelayCommand(
-                execute: () => OnEditItem(),
+                executeAsync: async () => await OnEditItem(),
                 canExecute: () => SelectedItem != null
             );
         }
