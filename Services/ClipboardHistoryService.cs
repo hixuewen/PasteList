@@ -147,10 +147,21 @@ namespace PasteList.Services
         {
             if (item == null)
                 throw new ArgumentNullException(nameof(item));
-            
+
             try
             {
-                _context.ClipboardItems.Update(item);
+                // 检查本地跟踪中是否已有相同 Id 的实体
+                var trackedItem = _context.ClipboardItems.Local.FirstOrDefault(x => x.Id == item.Id);
+                if (trackedItem != null)
+                {
+                    // 更新已跟踪实体的属性，避免同一 key 重复跟踪
+                    trackedItem.Content = item.Content;
+                }
+                else
+                {
+                    _context.ClipboardItems.Update(item);
+                }
+
                 var result = await _context.SaveChangesAsync();
                 return result > 0;
             }
