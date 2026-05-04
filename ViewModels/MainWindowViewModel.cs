@@ -106,6 +106,7 @@ namespace PasteList.ViewModels
                 ((RelayCommand)DoubleClickItemCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)DeleteItemCommand).RaiseCanExecuteChanged();
                 ((RelayCommand)UploadItemCommand).RaiseCanExecuteChanged();
+                ((RelayCommand)EditItemCommand).RaiseCanExecuteChanged();
             }
         }
         
@@ -196,6 +197,11 @@ namespace PasteList.ViewModels
         /// 上传项目命令
         /// </summary>
         public ICommand UploadItemCommand { get; private set; } = null!;
+
+        /// <summary>
+        /// 编辑项目命令
+        /// </summary>
+        public ICommand EditItemCommand { get; private set; } = null!;
         
         #endregion
 
@@ -397,6 +403,85 @@ namespace PasteList.ViewModels
             {
                 stopwatch.Stop();
                 _logger?.LogPerformance("上传记录操作", stopwatch.ElapsedMilliseconds);
+            }
+        }
+
+        /// <summary>
+        /// 处理编辑历史记录项事件
+        /// </summary>
+        private void OnEditItem()
+        {
+            if (SelectedItem == null)
+            {
+                _logger?.LogWarning("尝试编辑项目但SelectedItem为null");
+                return;
+            }
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            try
+            {
+                string contentPreview = SelectedItem.Content.Length > 50
+                    ? SelectedItem.Content.Substring(0, 50) + "..."
+                    : SelectedItem.Content;
+
+                _logger?.LogUserAction("尝试编辑记录", $"ID: {SelectedItem.Id}, 内容: {contentPreview}");
+
+                // 获取主窗口作为 Owner
+                var mainWindow = Application.Current.MainWindow;
+
+                // 打开编辑窗口
+                var editWindow = new EditRecordWindow(SelectedItem);
+                editWindow.Owner = mainWindow;
+                editWindow.ShowDialog();
+
+                // 用户取消编辑
+                if (!editWindow.IsSaved)
+                {
+                    _logger?.LogUserAction("用户取消编辑", $"ID: {SelectedItem.Id}");
+                    return;
+                }
+
+                // 用户保存编辑
+                string newContent = editWindow.EditedContent;
+
+                // 更新数据库
+                var updatedItem = new ClipboardItem(newContent)
+                {
+                    Id = SelectedItem.Id
+                };
+
+                var success = _historyService.UpdateItemAsync(updatedItem).Result;
+
+                if (success)
+                {
+                    // 更新 ObservableCollection 中对应项的内容
+                    var index = ClipboardItems.IndexOf(SelectedItem);
+                    if (index >= 0)
+                    {
+                        ClipboardItems[index].Content = newContent;
+                    }
+
+                    StatusMessage = "记录已更新";
+                    _logger?.LogInfo($"记录编辑成功，ID: {SelectedItem.Id}");
+                }
+                else
+                {
+                    StatusMessage = "更新失败";
+                    _logger?.LogError($"记录编辑失败，ID: {SelectedItem.Id}");
+                    MessageBox.Show("更新记录失败，请重试", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "编辑记录时发生错误");
+                StatusMessage = $"编辑失败: {ex.Message}";
+                MessageBox.Show($"编辑记录时发生错误: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                stopwatch.Stop();
+                _logger?.LogPerformance("编辑记录操作", stopwatch.ElapsedMilliseconds);
             }
         }
 
@@ -767,6 +852,11 @@ namespace PasteList.ViewModels
             UploadItemCommand = new RelayCommand(
                 executeAsync: async () => await OnUploadItem(),
                 canExecute: () => SelectedItem != null && _authService != null
+            );
+
+            EditItemCommand = new RelayCommand(
+                execute: () => OnEditItem(),
+                canExecute: () => SelectedItem != null
             );
         }
         

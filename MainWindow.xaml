@@ -187,11 +187,15 @@
             <!-- 右键菜单 -->
             <ListView.ContextMenu>
                 <ContextMenu>
-                    <MenuItem Header="上传" 
+                    <MenuItem Header="编辑"
+                              Command="{Binding EditItemCommand}"
+                              CommandParameter="{Binding SelectedItem}"/>
+                    <Separator/>
+                    <MenuItem Header="上传"
                               Command="{Binding UploadItemCommand}"
                               CommandParameter="{Binding SelectedItem}"/>
                     <Separator/>
-                    <MenuItem Header="删除" 
+                    <MenuItem Header="删除"
                               Command="{Binding DeleteItemCommand}"
                               CommandParameter="{Binding SelectedItem}"/>
                 </ContextMenu>
