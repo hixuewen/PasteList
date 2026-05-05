@@ -239,8 +239,12 @@ namespace PasteList.Services
         {
             try
             {
-                if (!Clipboard.ContainsData(DataFormats.Text) && 
-                    !Clipboard.ContainsData(DataFormats.Bitmap) && 
+                // 检查多种文本格式（兼容仅设置 ANSI 文本 CF_TEXT 的应用）
+                bool hasText = Clipboard.ContainsData(DataFormats.Text) ||
+                               Clipboard.ContainsData(DataFormats.UnicodeText);
+
+                if (!hasText &&
+                    !Clipboard.ContainsData(DataFormats.Bitmap) &&
                     !Clipboard.ContainsData(DataFormats.FileDrop))
                 {
                     return null;
@@ -284,7 +288,7 @@ namespace PasteList.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"获取剪贴板内容时发生错误: {ex.Message}");
+                _logger?.LogWarning($"获取剪贴板内容时发生错误: {ex.GetType().Name}: {ex.Message}");
                 return null;
             }
         }
