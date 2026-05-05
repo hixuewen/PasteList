@@ -371,30 +371,60 @@ namespace PasteList.Services
         }
         
         /// <summary>
-        /// 处理剪贴板变化事件
+        /// 带重试机制的剪贴板内容读取
+        /// 外部应用更改剪贴板后，剪贴板可能仍被短暂锁定，需要重试
+        /// </summary>
+        private ClipboardItem? TryGetClipboardContentWithRetry(int maxRetries = 5)
+        {
+            for (int i = 0; i < maxRetries; i++)
+            {
+                if (i > 0)
+                {
+                    // 指数退避：50ms, 100ms, 200ms, 400ms
+                    int delayMs = 50 * (1 << (i - 1));
+                    System.Threading.Thread.Sleep(delayMs);
+                }
+
+                var item = GetCurrentClipboardContent();
+                if (item != null)
+                {
+                    if (i > 0)
+                    {
+                        _logger?.LogDebug($"剪贴板内容在第 {i + 1} 次尝试时成功读取");
+                    }
+                    return item;
+                }
+            }
+
+            _logger?.LogWarning($"尝试 {maxRetries} 次后仍无法读取剪贴板内容");
+            return null;
+        }
+
+        /// <summary>
+        /// 处理剪贴板变化事件（带重试机制）
         /// </summary>
         private void OnClipboardChanged()
         {
             try
             {
-                // 延迟一小段时间，确保剪贴板数据已完全准备好
-                System.Threading.Thread.Sleep(50);
-
-                var clipboardItem = GetCurrentClipboardContent();
+                var clipboardItem = TryGetClipboardContentWithRetry();
                 if (clipboardItem != null)
                 {
-                    // 检查内容是否与上次相同，避免重复处理
                     if (_lastClipboardContent != clipboardItem.Content)
                     {
                         _lastClipboardContent = clipboardItem.Content;
-                        System.Diagnostics.Debug.WriteLine($"检测到剪贴板变化: {clipboardItem.Content?.Substring(0, Math.Min(50, clipboardItem.Content?.Length ?? 0))}...");
+                        var preview = clipboardItem.Content?.Length > 50
+                            ? clipboardItem.Content.Substring(0, 50) + "..."
+                            : clipboardItem.Content ?? "";
+                        _logger?.LogClipboardOperation("检测到变化", "Text",
+                            clipboardItem.Content?.Length ?? 0, preview);
                         ClipboardChanged?.Invoke(this, new ClipboardChangedEventArgs(clipboardItem));
                     }
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"处理剪贴板变化时发生错误: {ex.Message}");
+                _logger?.LogError(ex, "处理剪贴板变化时发生错误");
             }
         }
         
