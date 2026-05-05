@@ -242,7 +242,7 @@ namespace PasteList.Services
             catch (Exception ex)
             {
                 // 记录错误但不抛出异常
-                System.Diagnostics.Debug.WriteLine($"停止剪贴板监听时发生错误: {ex.Message}");
+                _logger?.LogWarning($"停止剪贴板监听时发生错误: {ex.Message}");
             }
         }
         
@@ -265,7 +265,7 @@ namespace PasteList.Services
                 }
                 
                 // 检查文本内容
-                if (Clipboard.ContainsText())
+                if (hasText)
                 {
                     string text = Clipboard.GetText();
                     if (!string.IsNullOrWhiteSpace(text))
@@ -462,7 +462,7 @@ namespace PasteList.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"转换图片为Base64时发生错误: {ex.Message}");
+                _logger?.LogWarning($"转换图片为Base64时发生错误: {ex.Message}");
                 return string.Empty;
             }
         }
