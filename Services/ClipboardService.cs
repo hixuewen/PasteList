@@ -374,7 +374,7 @@ namespace PasteList.Services
         /// 带重试机制的剪贴板内容读取
         /// 外部应用更改剪贴板后，剪贴板可能仍被短暂锁定，需要重试
         /// </summary>
-        private ClipboardItem? TryGetClipboardContentWithRetry(int maxRetries = 5)
+        private ClipboardItem? TryGetClipboardContentWithRetry(int maxRetries = 3)
         {
             for (int i = 0; i < maxRetries; i++)
             {
