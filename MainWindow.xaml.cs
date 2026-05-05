@@ -140,6 +140,10 @@ namespace PasteList
                     await _viewModel.LoadHistoryAsync();
                     // 设置初始状态消息
                     _viewModel.StatusMessage = "应用程序已就绪，按 Alt+Z 可唤起窗口";
+
+                    // 自动启动剪贴板监听
+                    await _viewModel.StartListeningAsync();
+                    _logger?.LogInfo("剪贴板监听已自动启动");
                 }
             }
             catch (Exception ex)
