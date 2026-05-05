@@ -160,14 +160,29 @@ namespace PasteList.Services
 
                 _isListening = true;
 
-                // 获取当前剪贴板内容作为初始状态
+                // 获取当前剪贴板内容作为初始状态（带重试，确保 COM 组件已就绪）
                 try
                 {
-                    var currentContent = GetCurrentClipboardContent();
-                    if (currentContent != null)
+                    ClipboardItem? initialContent = null;
+                    for (int retry = 0; retry < 3; retry++)
                     {
-                        _lastClipboardContent = currentContent.Content;
-                        _logger?.LogDebug($"已获取初始剪贴板内容，长度: {currentContent.Content.Length}");
+                        if (retry > 0)
+                        {
+                            System.Threading.Thread.Sleep(100);
+                            _logger?.LogDebug($"初始剪贴板读取重试 {retry}/3");
+                        }
+                        initialContent = GetCurrentClipboardContent();
+                        if (initialContent != null) break;
+                    }
+
+                    if (initialContent != null)
+                    {
+                        _lastClipboardContent = initialContent.Content;
+                        _logger?.LogDebug($"已获取初始剪贴板内容，长度: {initialContent.Content.Length}");
+                    }
+                    else
+                    {
+                        _logger?.LogDebug("初始剪贴板为空或无法读取，监听器将在首次变化时捕获");
                     }
                 }
                 catch (Exception ex)
