@@ -143,7 +143,9 @@ namespace PasteList
 
                     // 自动启动剪贴板监听
                     await _viewModel.StartListeningAsync();
-                    _logger?.LogInfo("剪贴板监听已自动启动");
+                    _logger?.LogInfo(_viewModel.IsListening
+                        ? "剪贴板监听已自动启动"
+                        : $"剪贴板监听启动失败: {_viewModel.StatusMessage}");
                 }
             }
             catch (Exception ex)
