@@ -121,6 +121,8 @@ namespace PasteList.ViewModels
                 _searchText = value;
                 OnPropertyChanged();
                 
+                ((RelayCommand)AddTextCommand).RaiseCanExecuteChanged();
+
                 // 执行搜索
                 _ = SearchAsync();
             }
@@ -202,6 +204,11 @@ namespace PasteList.ViewModels
         /// 编辑项目命令
         /// </summary>
         public ICommand EditItemCommand { get; private set; } = null!;
+
+        /// <summary>
+        /// 搜索框回车添加文本命令
+        /// </summary>
+        public ICommand AddTextCommand { get; private set; } = null!;
         
         #endregion
 
@@ -482,6 +489,48 @@ namespace PasteList.ViewModels
             {
                 stopwatch.Stop();
                 _logger?.LogPerformance("编辑记录操作", stopwatch.ElapsedMilliseconds);
+            }
+        }
+
+        /// <summary>
+        /// 从搜索框按回车将文本添加到列表
+        /// </summary>
+        private async Task OnAddTextFromSearch()
+        {
+            if (string.IsNullOrWhiteSpace(SearchText))
+            {
+                return;
+            }
+
+            try
+            {
+                string content = SearchText.Trim();
+                var item = new ClipboardItem(content);
+
+                var addedItem = await _historyService.AddItemAsync(item);
+
+                if (addedItem != null)
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        ClipboardItems.Insert(0, addedItem);
+                        TotalCount += 1;
+                        SearchText = string.Empty;
+                        StatusMessage = "已添加文本到列表";
+                    });
+
+                    _logger?.LogUserAction("从搜索框添加文本", $"长度: {content.Length}");
+                }
+                else
+                {
+                    StatusMessage = "添加失败或内容已存在";
+                    _logger?.LogWarning("从搜索框添加文本失败或内容重复");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "从搜索框添加文本时发生错误");
+                StatusMessage = $"添加失败: {ex.Message}";
             }
         }
 
@@ -857,6 +906,11 @@ namespace PasteList.ViewModels
             EditItemCommand = new RelayCommand(
                 executeAsync: async () => await OnEditItem(),
                 canExecute: () => SelectedItem != null
+            );
+
+            AddTextCommand = new RelayCommand(
+                executeAsync: async () => await OnAddTextFromSearch(),
+                canExecute: () => !string.IsNullOrWhiteSpace(SearchText)
             );
         }
         

@@ -46,6 +46,9 @@
                          Padding="8"
                          Margin="0,0,10,0"
                          VerticalContentAlignment="Center">
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Enter" Command="{Binding AddTextCommand}" />
+                    </TextBox.InputBindings>
                     <TextBox.Style>
                         <Style TargetType="TextBox">
                             <Setter Property="Foreground" Value="Black"/>
