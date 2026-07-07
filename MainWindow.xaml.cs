@@ -175,7 +175,7 @@ namespace PasteList
             _historyService = new ClipboardHistoryService(_dbContext);
             _logger.LogInfo("历史记录服务初始化完成");
 
-            _startupService = new StartupService();
+            _startupService = new StartupService(_logger);
             _logger.LogInfo("启动服务初始化完成");
 
             // 初始化设置服务（需要在认证服务之前，因为认证服务需要读取服务器地址）
