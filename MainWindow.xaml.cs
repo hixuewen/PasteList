@@ -178,6 +178,9 @@ namespace PasteList
             _startupService = new StartupService(_logger);
             _logger.LogInfo("启动服务初始化完成");
 
+            // 迁移旧版注册表开机启动配置到计划任务（如存在）
+            _startupService.MigrateLegacyStartup();
+
             // 初始化设置服务（需要在认证服务之前，因为认证服务需要读取服务器地址）
             _settingsService = new SettingsService(_logger);
             await _settingsService.LoadAsync();
