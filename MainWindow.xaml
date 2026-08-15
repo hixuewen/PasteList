@@ -6,6 +6,7 @@
         xmlns:local="clr-namespace:PasteList"
         xmlns:tb="http://www.hardcodet.net/taskbar"
         mc:Ignorable="d"
+        PreviewKeyDown="Window_PreviewKeyDown"
         Title="剪贴板历史记录" Height="600" Width="900" MinHeight="400" MinWidth="600">
     <Grid>
         <Grid.RowDefinitions>
@@ -40,8 +41,10 @@
                 </Grid.ColumnDefinitions>
                 
                 <!-- 搜索框 -->
-                <TextBox Grid.Column="0" 
+                <TextBox Grid.Column="0"
+                         x:Name="SearchTextBox"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                         PreviewKeyDown="SearchTextBox_PreviewKeyDown"
                          FontSize="14" 
                          Padding="8"
                          Margin="0,0,10,0"
@@ -170,13 +173,15 @@
         </Border>
         
         <!-- 历史记录列表 -->
-        <ListView Grid.Row="1" 
+        <ListView Grid.Row="1"
+                  x:Name="HistoryListView"
                   ItemsSource="{Binding ClipboardItems}"
                   SelectedItem="{Binding SelectedItem}"
                   Margin="10"
                   BorderThickness="1"
                   BorderBrush="#DDDDDD"
-                  MouseDoubleClick="ListView_MouseDoubleClick">
+                  MouseDoubleClick="ListView_MouseDoubleClick"
+                  PreviewKeyDown="HistoryListView_PreviewKeyDown">
             <ListView.ItemTemplate>
                 <DataTemplate>
                     <TextBlock Text="{Binding Content}" 

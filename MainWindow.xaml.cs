@@ -354,6 +354,11 @@ namespace PasteList
                 WindowState = WindowState.Normal;
                 Activate();
 
+                // 窗口隐藏再显示后键盘焦点会丢失，导致上下方向键无法选择列表项。
+                // 延迟到输入优先级，等窗口激活流程完成后再恢复焦点。
+                Dispatcher.BeginInvoke(new Action(RestoreKeyboardFocus),
+                    System.Windows.Threading.DispatcherPriority.Input);
+
                 _logger?.LogDebug("窗口已恢复显示");
             }
             catch (Exception ex)
@@ -361,6 +366,113 @@ namespace PasteList
                 _logger?.LogError(ex, "恢复窗口显示时发生错误");
                 throw;
             }
+        }
+
+        /// <summary>
+        /// 窗口唤起后恢复键盘焦点：
+        /// 若列表已持有焦点则保持不动，否则聚焦搜索框。
+        /// 搜索框内的上下方向键会通过 PreviewKeyDown 转发给列表，实现方向键选择。
+        /// </summary>
+        private void RestoreKeyboardFocus()
+        {
+            try
+            {
+                if (!IsVisible || WindowState == WindowState.Minimized)
+                    return;
+
+                if (!HistoryListView.IsKeyboardFocusWithin)
+                {
+                    SearchTextBox.Focus();
+                    Keyboard.Focus(SearchTextBox);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "恢复键盘焦点时发生错误");
+            }
+        }
+
+        /// <summary>
+        /// 搜索框内按下上下方向键时，将选择操作转发给历史记录列表，
+        /// 支持"输入过滤 + 方向键选择"的无鼠标操作。
+        /// </summary>
+        /// <param name="sender">事件发送者</param>
+        /// <param name="e">键盘事件参数</param>
+        private void SearchTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            // 回车：有选中记录时执行与双击相同的粘贴操作（复制到剪贴板并粘贴到之前的窗口）；
+            // 无选中记录时不拦截，保留"回车将搜索文本添加到列表"的原有行为
+            if (e.Key == Key.Enter)
+            {
+                if (_viewModel?.SelectedItem != null &&
+                    _viewModel.DoubleClickItemCommand.CanExecute(null))
+                {
+                    _viewModel.DoubleClickItemCommand.Execute(null);
+                    e.Handled = true;
+                }
+                return;
+            }
+
+            if (e.Key != Key.Up && e.Key != Key.Down)
+                return;
+
+            if (HistoryListView.Items.Count == 0)
+                return;
+
+            int currentIndex = HistoryListView.SelectedIndex;
+            int newIndex;
+
+            if (currentIndex < 0)
+            {
+                // 无选中项：向下选择第一项，向上选择最后一项
+                newIndex = e.Key == Key.Down ? 0 : HistoryListView.Items.Count - 1;
+            }
+            else
+            {
+                newIndex = currentIndex + (e.Key == Key.Down ? 1 : -1);
+                newIndex = Math.Max(0, Math.Min(HistoryListView.Items.Count - 1, newIndex));
+            }
+
+            if (newIndex != currentIndex)
+            {
+                HistoryListView.SelectedIndex = newIndex;
+                HistoryListView.ScrollIntoView(HistoryListView.Items[newIndex]);
+            }
+
+            e.Handled = true;
+        }
+
+        /// <summary>
+        /// 列表内按回车时执行与双击相同的粘贴操作
+        /// </summary>
+        /// <param name="sender">事件发送者</param>
+        /// <param name="e">键盘事件参数</param>
+        private void HistoryListView_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter)
+                return;
+
+            if (_viewModel?.SelectedItem != null &&
+                _viewModel.DoubleClickItemCommand.CanExecute(null))
+            {
+                _viewModel.DoubleClickItemCommand.Execute(null);
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>
+        /// ESC 隐藏主窗口到托盘（与 Alt+Z 在窗口前台时的行为一致）
+        /// </summary>
+        /// <param name="sender">事件发送者</param>
+        /// <param name="e">键盘事件参数</param>
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Escape)
+                return;
+
+            // 最小化会触发 StateChanged，其中统一执行 Hide() 隐藏到托盘
+            WindowState = WindowState.Minimized;
+            e.Handled = true;
         }
         
         /// <summary>
