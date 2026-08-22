@@ -20,8 +20,6 @@ namespace PasteList.ViewModels
     {
         private readonly IClipboardService _clipboardService = null!;
         private readonly IClipboardHistoryService _historyService = null!;
-        private readonly IAuthService? _authService;
-        private readonly ISettingsService? _settingsService;
         private readonly ILoggerService? _logger;
         private bool _disposed = false;
         
@@ -56,15 +54,11 @@ namespace PasteList.ViewModels
         /// <param name="clipboardService">剪贴板服务</param>
         /// <param name="historyService">历史记录服务</param>
         /// <param name="logger">日志服务</param>
-        /// <param name="authService">认证服务</param>
-        /// <param name="settingsService">设置服务</param>
-        public MainWindowViewModel(IClipboardService clipboardService, IClipboardHistoryService historyService, ILoggerService? logger = null, IAuthService? authService = null, ISettingsService? settingsService = null)
+        public MainWindowViewModel(IClipboardService clipboardService, IClipboardHistoryService historyService, ILoggerService? logger = null)
         {
             _clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
             _historyService = historyService ?? throw new ArgumentNullException(nameof(historyService));
             _logger = logger;
-            _authService = authService;
-            _settingsService = settingsService;
             _clipboardItems = new ObservableCollection<ClipboardItem>();
 
             InitializeCommands();
@@ -233,15 +227,10 @@ namespace PasteList.ViewModels
                     ? SelectedItem.Content.Substring(0, 50) + "..."
                     : SelectedItem.Content;
 
-                // 格式化删除内容用于日志记录
                 string deleteContentPreview = FormatContentForLog(SelectedItem.Content, GetContentType(SelectedItem.Content));
                 _logger?.LogUserAction("尝试删除记录", $"ID: {SelectedItem.Id}, 内容: {deleteContentPreview}");
 
-                // 根据是否已登录显示不同的确认信息
-                bool willSyncDelete = _authService != null && _authService.IsLoggedIn;
-                string confirmMessage = willSyncDelete
-                    ? $"确定要删除这条记录吗？\n（将同时删除服务器上的记录）\n\n内容预览：{contentPreview}"
-                    : $"确定要删除这条记录吗？\n\n内容预览：{contentPreview}";
+                string confirmMessage = $"确定要删除这条记录吗？\n\n内容预览：{contentPreview}";
 
                 // 显示确认对话框
                 var result = MessageBox.Show(
@@ -254,63 +243,20 @@ namespace PasteList.ViewModels
 
                 if (result == MessageBoxResult.Yes)
                 {
-                    // 在清空SelectedItem之前保存ID和内容
                     int itemId = SelectedItem.Id;
-                    string itemContent = SelectedItem.Content;
-                    bool serverDeleteSuccess = false;
-
-                    // 如果已登录，先根据内容查找并删除服务器上的记录
-                    if (_authService != null && _authService.IsLoggedIn)
-                    {
-                        StatusMessage = "正在删除服务器记录...";
-                        var serverDeleteResult = await _authService.DeleteClipboardItemByContentAsync(itemContent);
-                        
-                        if (serverDeleteResult.Success)
-                        {
-                            serverDeleteSuccess = true;
-                            _logger?.LogInfo($"服务器记录删除成功");
-                        }
-                        else
-                        {
-                            // 服务器删除失败，询问是否继续删除本地记录
-                            _logger?.LogWarning($"服务器记录删除失败: {serverDeleteResult.ErrorMessage}");
-                            var continueResult = MessageBox.Show(
-                                $"服务器记录删除失败: {serverDeleteResult.ErrorMessage}\n\n是否继续删除本地记录？",
-                                "警告",
-                                MessageBoxButton.YesNo,
-                                MessageBoxImage.Warning,
-                                MessageBoxResult.No
-                            );
-                            
-                            if (continueResult != MessageBoxResult.Yes)
-                            {
-                                StatusMessage = "删除已取消";
-                                return;
-                            }
-                        }
-                    }
 
                     StatusMessage = "正在删除本地记录...";
 
-                    // 执行本地删除操作
                     var success = await _historyService.DeleteItemAsync(itemId);
 
                     if (success)
                     {
-                        // 从集合中移除项目
                         ClipboardItems.Remove(SelectedItem);
-
-                        // 更新总数
                         TotalCount = await _historyService.GetTotalCountAsync();
-
-                        // 清空选中项
                         SelectedItem = null;
 
-                        StatusMessage = serverDeleteSuccess ? "记录已同步删除" : "记录已删除";
-                        _logger?.LogInfo($"记录删除成功，ID: {itemId}, 同步删除: {serverDeleteSuccess}, 内容: {deleteContentPreview}");
-
-                        // 如果启用了同步，触发从服务器同步
-                        await SyncFromServerAsync();
+                        StatusMessage = "记录已删除";
+                        _logger?.LogInfo($"记录删除成功，ID: {itemId}, 内容: {deleteContentPreview}");
                     }
                     else
                     {
@@ -901,9 +847,6 @@ namespace PasteList.ViewModels
                 });
 
                 _logger?.LogUserAction("剪贴板内容自动添加", $"类型: {contentType}, 长度: {e.ClipboardItem.Content.Length}");
-
-                // 如果启用了同步，触发从服务器同步
-                await SyncFromServerAsync();
             }
             catch (Exception ex)
             {
@@ -1010,70 +953,6 @@ namespace PasteList.ViewModels
             }
         }
 
-        /// <summary>
-        /// 从服务器同步数据到本地
-        /// </summary>
-        private async Task SyncFromServerAsync()
-        {
-            try
-            {
-                // 检查是否启用同步
-                if (_settingsService == null || !_settingsService.IsSyncEnabled)
-                {
-                    return;
-                }
-
-                // 检查是否已登录
-                if (_authService == null || !_authService.IsLoggedIn)
-                {
-                    return;
-                }
-
-                _logger?.LogUserAction("触发同步", "从服务器获取数据");
-                StatusMessage = "正在同步...";
-
-                // 从服务器获取所有剪贴板项
-                var syncResult = await _authService.GetAllClipboardItemsAsync();
-
-                if (!syncResult.Success)
-                {
-                    _logger?.LogWarning($"同步失败: {syncResult.ErrorMessage}");
-                    StatusMessage = $"同步失败: {syncResult.ErrorMessage}";
-                    return;
-                }
-
-                if (syncResult.Items.Count == 0)
-                {
-                    _logger?.LogInfo("服务器上没有数据需要同步");
-                    return;
-                }
-
-                // 获取所有内容用于批量添加（去重）
-                var contents = syncResult.Items.Select(item => item.Content).ToList();
-
-                // 批量添加到本地数据库（自动去重）
-                var addedCount = await _historyService.AddItemsWithDeduplicationAsync(contents);
-
-                if (addedCount > 0)
-                {
-                    _logger?.LogInfo($"同步成功，新增 {addedCount} 条记录");
-                    
-                    // 刷新列表
-                    await LoadHistoryAsync();
-                    StatusMessage = $"同步完成，新增 {addedCount} 条记录";
-                }
-                else
-                {
-                    _logger?.LogInfo("同步完成，本地数据已是最新");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "同步过程中发生错误");
-                StatusMessage = $"同步失败: {ex.Message}";
-            }
-        }
-        
         #region INotifyPropertyChanged 实现
         
         public event PropertyChangedEventHandler? PropertyChanged;

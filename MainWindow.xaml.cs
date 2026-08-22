@@ -107,8 +107,6 @@ namespace PasteList
         private IClipboardHistoryService? _historyService;
         private ClipboardDbContext? _dbContext;
         private IStartupService? _startupService;
-        private IAuthService? _authService;
-        private ISettingsService? _settingsService;
         private ILoggerService? _logger;
 
         /// <summary>
@@ -181,36 +179,8 @@ namespace PasteList
             // 迁移旧版注册表开机启动配置到计划任务（如存在）
             _startupService.MigrateLegacyStartup();
 
-            // 初始化设置服务（需要在认证服务之前，因为认证服务需要读取服务器地址）
-            _settingsService = new SettingsService(_logger);
-            await _settingsService.LoadAsync();
-            _logger.LogInfo("设置服务初始化完成");
-
-            // 初始化认证服务
-            _authService = new AuthService(_settingsService, _logger);
-            _logger.LogInfo("认证服务初始化完成");
-
-            // 尝试自动登录（使用保存的凭证）
-            try
-            {
-                var autoLoginSuccess = await _authService.TryAutoLoginAsync();
-                if (autoLoginSuccess)
-                {
-                    _logger.LogInfo("自动登录成功");
-                }
-                else
-                {
-                    _logger.LogDebug("自动登录失败或没有保存的凭证");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "自动登录初始化失败");
-                // 不阻断应用启动，继续运行
-            }
-
             // 初始化ViewModel
-            _viewModel = new MainWindowViewModel(_clipboardService, _historyService, _logger, _authService, _settingsService);
+            _viewModel = new MainWindowViewModel(_clipboardService, _historyService, _logger);
             _logger.LogInfo("ViewModel初始化完成");
 
             // 设置数据上下文
