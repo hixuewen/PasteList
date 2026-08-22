@@ -17,9 +17,19 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 <!-- OPENSPEC:END -->
 
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI assistants working with code in this repository.
+
+## 自动操作限制（重要）
+
+AI 助手被禁止执行以下自动操作，除非用户明确要求：
+
+1. **不要自动编译**：除非用户明确要求，否则不要主动运行 `dotnet build` / `dotnet run` / `dotnet publish`。
+2. **不要自动提交代码**：除非用户明确要求，否则不要主动执行 `git commit`。
+3. **不要自动推送代码**：除非用户明确要求，否则不要主动执行 `git push`。
+
+如需构建、提交或推送，必须先征得用户的明确同意。
 
 ## 项目概述
 
