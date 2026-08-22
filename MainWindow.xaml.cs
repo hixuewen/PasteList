@@ -710,37 +710,9 @@ namespace PasteList
                     return;
                 }
 
-                if (_authService == null)
-                {
-                    MessageBox.Show("认证服务未初始化，无法打开设置", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                if (_historyService == null)
-                {
-                    MessageBox.Show("历史记录服务未初始化，无法打开设置", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                if (_settingsService == null)
-                {
-                    MessageBox.Show("设置服务未初始化，无法打开设置", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
                 // 创建设置窗口
-                var settingsWindow = new SettingsWindow(_startupService, _authService, _historyService, _settingsService, _logger);
+                var settingsWindow = new SettingsWindow(_startupService, _logger);
                 settingsWindow.Owner = this;
-
-                // 订阅同步完成事件，刷新主窗口列表
-                settingsWindow.SyncCompleted += async (s, addedCount) =>
-                {
-                    if (_viewModel != null && addedCount > 0)
-                    {
-                        await _viewModel.LoadHistoryAsync();
-                        _viewModel.StatusMessage = $"同步完成，新增 {addedCount} 条记录";
-                    }
-                };
 
                 // 显示设置窗口（模态对话框）
                 settingsWindow.ShowDialog();

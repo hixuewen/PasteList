@@ -3,42 +3,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:converters="clr-namespace:PasteList.Converters"
         mc:Ignorable="d"
-        Title="首选项" Height="550" Width="450"
+        Title="首选项" Height="300" Width="400"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         WindowStyle="SingleBorderWindow"
         ShowInTaskbar="False">
     <Window.Resources>
-        <!-- 通用文本框样式 -->
-        <Style x:Key="AuthTextBoxStyle" TargetType="TextBox">
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="Padding" Value="8,6"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="BorderBrush" Value="#CCCCCC"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Style.Triggers>
-                <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Background" Value="#F5F5F5"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-        
-        <!-- 密码框样式 -->
-        <Style x:Key="AuthPasswordBoxStyle" TargetType="PasswordBox">
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="Padding" Value="8,6"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="BorderBrush" Value="#CCCCCC"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Style.Triggers>
-                <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Background" Value="#F5F5F5"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-        
         <!-- 主要按钮样式 -->
         <Style x:Key="PrimaryButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="#4CAF50"/>
@@ -75,7 +46,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        
+
         <!-- 次要按钮样式 -->
         <Style x:Key="SecondaryButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="#9E9E9E"/>
@@ -112,279 +83,26 @@
                 </Setter.Value>
             </Setter>
         </Style>
-        
-        <!-- 链接按钮样式 -->
-        <Style x:Key="LinkButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#2196F3"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <TextBlock Text="{TemplateBinding Content}"
-                                   Foreground="{TemplateBinding Foreground}"
-                                   TextDecorations="Underline"/>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Foreground" Value="#1976D2"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Foreground" Value="#999999"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        
-        <!-- 危险按钮样式（注销） -->
-        <Style x:Key="DangerButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#f44336"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="3"
-                                SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#d32f2f"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#c62828"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Background" Value="#E0E0E0"/>
-                                <Setter Property="Foreground" Value="#666666"/>
-                                <Setter Property="Cursor" Value="Arrow"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        
-        <!-- 布尔值到可见性转换器 -->
-        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
-        
-        <!-- 布尔值取反转换器 -->
-        <converters:InverseBoolConverter x:Key="InverseBoolConverter"/>
     </Window.Resources>
-    
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Tab页设置区域 -->
-        <TabControl Grid.Row="0" Margin="10,10,10,0">
-            <!-- 常规设置 Tab -->
-            <TabItem Header="常规">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <Border Padding="15">
-                        <StackPanel>
-                            <!-- 启动选项区域 -->
-                            <TextBlock Text="启动" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
-                            
-                            <!-- 开机启动设置 -->
-                            <CheckBox Content="开机自动启动"
-                                      IsChecked="{Binding IsStartupEnabled}"
-                                      Margin="10,5,0,0"
-                                      FontSize="13"/>
-                            
-                            <!-- 分隔线 -->
-                            <Separator Margin="0,20,0,15" Background="#E0E0E0"/>
-                            
-                            <!-- 用户认证区域 -->
-                            <TextBlock Text="用户账户" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
-                            
-                            <!-- 已登录状态 -->
-                            <StackPanel Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToVisibility}}"
-                                        Margin="10,5,0,0">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Text="👤" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="欢迎，" FontSize="13" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding CurrentUsername}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                    <TextBlock Text="！" FontSize="13" VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <TextBlock FontSize="12" Foreground="#666666" Margin="24,0,0,12">
-                                    <Run Text="邮箱："/>
-                                    <Run Text="{Binding CurrentEmail, Mode=OneWay}"/>
-                                </TextBlock>
-                                <Button Content="注销" 
-                                        Command="{Binding LogoutCommand}"
-                                        Style="{StaticResource DangerButtonStyle}"
-                                        Width="80"
-                                        HorizontalAlignment="Left"
-                                        Margin="24,0,0,0"
-                                        IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
-                            </StackPanel>
-                            
-                            <!-- 未登录状态 -->
-                            <StackPanel Visibility="{Binding IsNotLoggedIn, Converter={StaticResource BoolToVisibility}}"
-                                        Margin="10,5,0,0">
-                                <!-- 用户名输入 -->
-                                <Grid Margin="0,0,0,10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="80"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="用户名" FontSize="13" VerticalAlignment="Center" Grid.Column="0"/>
-                                    <TextBox Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
-                                             Style="{StaticResource AuthTextBoxStyle}"
-                                             Grid.Column="1"
-                                             IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
-                                </Grid>
-                                
-                                <!-- 邮箱输入（仅注册时显示） -->
-                                <Grid Margin="0,0,0,10"
-                                      Visibility="{Binding IsRegisterMode, Converter={StaticResource BoolToVisibility}}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="80"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="邮箱" FontSize="13" VerticalAlignment="Center" Grid.Column="0"/>
-                                    <TextBox Text="{Binding Email, UpdateSourceTrigger=PropertyChanged}"
-                                             Style="{StaticResource AuthTextBoxStyle}"
-                                             Grid.Column="1"
-                                             IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
-                                </Grid>
-                                
-                                <!-- 密码输入 -->
-                                <Grid Margin="0,0,0,10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="80"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="密码" FontSize="13" VerticalAlignment="Center" Grid.Column="0"/>
-                                    <PasswordBox x:Name="PasswordBox"
-                                                 Style="{StaticResource AuthPasswordBoxStyle}"
-                                                 Grid.Column="1"
-                                                 PasswordChanged="PasswordBox_PasswordChanged"
-                                                 IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
-                                </Grid>
-                                
-                                <!-- 确认密码输入（仅注册时显示） -->
-                                <Grid Margin="0,0,0,10"
-                                      Visibility="{Binding IsRegisterMode, Converter={StaticResource BoolToVisibility}}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="80"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="确认密码" FontSize="13" VerticalAlignment="Center" Grid.Column="0"/>
-                                    <PasswordBox x:Name="ConfirmPasswordBox"
-                                                 Style="{StaticResource AuthPasswordBoxStyle}"
-                                                 Grid.Column="1"
-                                                 PasswordChanged="ConfirmPasswordBox_PasswordChanged"
-                                                 IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
-                                </Grid>
-                                
-                                <!-- 按钮区域 -->
-                                <StackPanel Orientation="Horizontal" Margin="80,5,0,0">
-                                    <!-- 登录按钮（登录模式） -->
-                                    <Button Content="登录" 
-                                            Command="{Binding LoginCommand}"
-                                            Style="{StaticResource PrimaryButtonStyle}"
-                                            Width="80"
-                                            Visibility="{Binding IsLoginMode, Converter={StaticResource BoolToVisibility}}"/>
-                                    
-                                    <!-- 注册按钮（注册模式） -->
-                                    <Button Content="注册" 
-                                            Command="{Binding RegisterCommand}"
-                                            Style="{StaticResource PrimaryButtonStyle}"
-                                            Width="80"
-                                            Visibility="{Binding IsRegisterMode, Converter={StaticResource BoolToVisibility}}"/>
-                                    
-                                    <!-- 切换模式链接 -->
-                                    <Button Content="{Binding AuthModeSwitchText}"
-                                            Command="{Binding ToggleModeCommand}"
-                                            Style="{StaticResource LinkButtonStyle}"
-                                            Margin="15,0,0,0"
-                                            VerticalAlignment="Center"/>
-                                </StackPanel>
-                                
-                                <!-- 状态消息 -->
-                                <TextBlock Text="{Binding AuthStatusMessage}"
-                                           FontSize="12"
-                                           Margin="80,10,0,0"
-                                           TextWrapping="Wrap"
-                                           Visibility="{Binding HasAuthStatusMessage, Converter={StaticResource BoolToVisibility}}">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground" Value="#666666"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding AuthStatusMessage}" Value="登录成功！">
-                                                    <Setter Property="Foreground" Value="#4CAF50"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding AuthStatusMessage}" Value="注册成功！">
-                                                    <Setter Property="Foreground" Value="#4CAF50"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-                </ScrollViewer>
-            </TabItem>
-            
-            <!-- 高级设置 Tab -->
-            <TabItem Header="高级">
-                <Border Padding="15">
-                    <StackPanel>
-                        <!-- 高级选项区域 -->
-                        <TextBlock Text="高级选项" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
-                        
-                        <!-- 同步设置 -->
-                        <CheckBox Content="同步（勾选后将从服务器同步数据到本地）"
-                                  IsChecked="{Binding IsSyncEnabled}"
-                                  Margin="10,5,0,0"
-                                  FontSize="13"/>
-                        
-                        <!-- 同步状态消息 -->
-                        <TextBlock Text="{Binding SyncStatusMessage}"
-                                   FontSize="12"
-                                   Margin="30,10,0,0"
-                                   TextWrapping="Wrap"
-                                   Visibility="{Binding HasSyncStatusMessage, Converter={StaticResource BoolToVisibility}}">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="#666666"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding SyncStatusMessage}" Value="正在同步...">
-                                            <Setter Property="Foreground" Value="#2196F3"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
+        <!-- 常规设置区域 -->
+        <Border Grid.Row="0" Padding="15">
+            <StackPanel>
+                <TextBlock Text="启动" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
 
-                        <!-- 立即同步按钮 -->
-                        <Button Content="立即同步"
-                                Command="{Binding SyncNowCommand}"
-                                Style="{StaticResource PrimaryButtonStyle}"
-                                Width="80"
-                                HorizontalAlignment="Left"
-                                Margin="10,10,0,0"
-                                IsEnabled="{Binding IsLoggedIn, FallbackValue=False}"/>
-                    </StackPanel>
-                </Border>
-            </TabItem>
-        </TabControl>
+                <!-- 开机启动设置 -->
+                <CheckBox Content="开机自动启动"
+                          IsChecked="{Binding IsStartupEnabled}"
+                          Margin="10,5,0,0"
+                          FontSize="13"/>
+            </StackPanel>
+        </Border>
 
         <!-- 按钮区域 -->
         <Border Grid.Row="1" Background="#F5F5F5" Padding="20">
